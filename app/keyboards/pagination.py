@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from lexicon import LEXICON_book
-from services import books
+from app.lexicon.lexicon import LEXICON_book
+from app.services import books
 
 
 def create_pagination_keyboard(page=1) -> InlineKeyboardMarkup:

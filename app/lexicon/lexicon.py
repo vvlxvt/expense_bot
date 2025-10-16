@@ -1,4 +1,4 @@
-import config
+from app import config
 
 
 conf = config.load_config(None)

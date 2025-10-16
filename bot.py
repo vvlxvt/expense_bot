@@ -6,12 +6,12 @@ from aiogram.enums import ParseMode
 from aiohttp import web
 import aiohttp_jinja2, jinja2, json
 
-import config
-from keyboards import set_main_menu
-from database.functions import get_cumulative_data
-import handlers
+from app import config
+from app.keyboards import set_main_menu
+from app.database.functions import get_cumulative_data
+from app import handlers
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from services import daily_timer
+from app.services import daily_timer
 
 
 conf = config.load_config(None)

@@ -2,7 +2,7 @@ from sqlalchemy import func
 from .conn_db import session, DictTable, MainTable
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
-from services import get_month_range, get_week_range
+from app.services import get_month_range, get_week_range
 
 
 def get_cumulative_data(category: str):

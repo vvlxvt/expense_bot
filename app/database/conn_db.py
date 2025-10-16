@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, MetaData, Table, func
 from sqlalchemy.orm import Session, registry, DeclarativeBase
-import config 
+from app import config
 
 conf = config.load_config(None)
 DB_PATH = conf.db_path

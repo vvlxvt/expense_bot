@@ -1,10 +1,10 @@
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
-from keyboards.pagination import create_pagination_keyboard
-from lexicon import LEXICON, LEXICON_MONTH, LEXICON_ANOTHER
-from keyboards import add_subname_kb, another_kb, one_button_kb
-from database import (
+from app.keyboards.pagination import create_pagination_keyboard
+from app.lexicon import LEXICON, LEXICON_MONTH, LEXICON_ANOTHER
+from app.keyboards import add_subname_kb, another_kb, one_button_kb
+from app.database import (
     get_stat_week,
     get_my_expenses,
     get_my_expenses_group,
@@ -15,11 +15,11 @@ from database import (
     spend_month,
     spend_today,
 )
-from filters import IsAdmin
+from app.filters import IsAdmin
 from bot import ADMIN_IDS
-from services import prepare_book, get_month_range, books
-from config.config import GlobalVars
-import config
+from app.services import prepare_book, get_month_range, books
+from app.config.config import GlobalVars
+from app import config
 
 # Build charts URL from environment
 _conf = config.load_config(None)

@@ -1,13 +1,13 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from services import get_categories, add_new_data, form_expense_instance, books
-from keyboards import add_subname_kb
-from lexicon import *
-from database import no_subs
-from filters import IsAdmin
+from app.services import get_categories, add_new_data, form_expense_instance, books
+from app.keyboards import add_subname_kb
+from app.lexicon import *
+from app.database import no_subs
+from app.filters import IsAdmin
 from bot import ADMIN_IDS
-from keyboards.pagination import create_pagination_keyboard
-from config.config import GlobalVars
+from app.keyboards.pagination import create_pagination_keyboard
+from app.config.config import GlobalVars
 
 
 router: Router = Router()
