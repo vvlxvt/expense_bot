@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Cumulative Expenses Chart</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+  <style>
+  {% raw %}
+    body {
+        font-family: sans-serif;
+        margin: 40px;
+    }
+    canvas {
+        display: block;
+        margin: auto;
+    }
+  {% endraw %}
+  </style>
+</head>
+<body>
+  <h2 style="text-align:center">
+    Накопительные траты {{ category }} — {{ required_month }}
+  </h2>
+
+  <canvas id="chart" width="1200" height="600"></canvas>
+
+  <script>
+    const days = {{ days | safe }};
+    const totals = {{ cumulative | safe }};
+    {% raw %}
+    new Chart(document.getElementById('chart'), {
+      type: 'line',
+      data: {
+        labels: days,
+        datasets: [{
+          label: 'Cumulative expenses (₾)',
+          data: totals,
+          borderColor: 'blue',
+          fill: true,
+          backgroundColor: 'rgba(0, 0, 255, 0.1)',
+          tension: 0.1
+        }]
+      },
+      options: {
+        responsive: false,
+        plugins: {
+          legend: { display: true },
+          datalabels: {
+            align: 'top',
+            anchor: 'end',
+            color: 'black',
+            font: { weight: 'bold', size: 12 },
+            formatter: (value) => value.toFixed(2)
+          }
+        },
+        scales: {
+          y: { beginAtZero: true },
+          x: { title: { display: true, text: 'Day of month' } }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+    {% endraw %}
+  </script>
+</body>
+</html>
