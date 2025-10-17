@@ -32,6 +32,7 @@
         </div>
       </div>
     </div>
+    <button id="fsToggle" class="fs-toggle-btn">↻ Fullscreen</button>
   </div>
 
   <script type="application/json" id="days-data">{{ days | safe }}</script>
@@ -47,7 +48,15 @@
     const previousCumulative = totals.map((v, i) => i === 0 ? 0 : +(totals[i - 1]).toFixed(2));
   </script>
   <script>
-    new Chart(document.getElementById('chart'), {
+    function computeValueFontSize() {
+      const isFs = document.body.classList.contains('fs-active') || document.querySelector('.chart-container')?.classList.contains('fs-rotate') || (window.matchMedia && window.matchMedia('(orientation: landscape)').matches);
+      const isMobile = (window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
+      if (isFs || (isMobile && window.matchMedia('(orientation: landscape)').matches)) return 32;
+      if (isMobile) return 24;
+      return 16;
+    }
+
+    const chart = new Chart(document.getElementById('chart'), {
       type: 'bar',
       data: {
         labels: days,
@@ -79,7 +88,7 @@
             align: 'top',
             anchor: 'end',
             color: 'black',
-            font: { weight: 'bold', size: 12 },
+            font: { weight: 'bold', size: computeValueFontSize() },
             formatter: (value) => value.toFixed(2)
           }
         },
@@ -89,6 +98,17 @@
         }
       },
       plugins: [ChartDataLabels]
+    });
+
+    function updateChartValueFont() {
+      const size = computeValueFontSize();
+      chart.options.plugins.datalabels.font = { weight: 'bold', size };
+      chart.update('none');
+    }
+
+    window.addEventListener('resize', updateChartValueFont);
+    ['fullscreenchange','webkitfullscreenchange','msfullscreenchange','mozfullscreenchange','orientationchange'].forEach(evt => {
+      document.addEventListener(evt, updateChartValueFont);
     });
   </script>
   <script>
@@ -115,6 +135,103 @@
       if (target.tagName === 'BUTTON') {
         const value = target.getAttribute('data-month');
         updateQuery(null, value);
+      }
+    });
+
+    // Fullscreen landscape toggle (mobile-friendly)
+    const container = document.querySelector('.chart-container');
+    const fsBtn = document.getElementById('fsToggle');
+
+    function isFullscreen() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || document.mozFullScreenElement);
+    }
+
+    function isFsState() {
+      return isFullscreen() || container.classList.contains('fs-fallback') || container.classList.contains('fs-rotate') || document.body.classList.contains('fs-active');
+    }
+
+    async function enterFullscreen(el) {
+      const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen || el.mozRequestFullScreen;
+      if (req) {
+        try {
+          await req.call(el);
+        } catch (_) {
+          // ignored
+        }
+      } else {
+        // fallback
+        el.classList.add('fs-fallback');
+      }
+    }
+
+    async function exitFullscreen() {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen || document.mozCancelFullScreen;
+      if (exit) {
+        try {
+          await exit.call(document);
+        } catch (_) {
+          // ignored
+        }
+      } else {
+        // fallback
+        container.classList.remove('fs-fallback');
+      }
+    }
+
+    fsBtn?.addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const inFs = isFsState();
+      try {
+        if (!inFs) {
+          // On iOS Safari, fullscreen is limited. Fallback ensures visual fullscreen.
+          await enterFullscreen(container);
+          if (screen.orientation && screen.orientation.lock) {
+            try { await screen.orientation.lock('landscape'); } catch (_) {}
+          }
+          // If orientation did not change, apply CSS rotation
+          if (window.innerWidth < window.innerHeight) {
+            container.classList.add('fs-rotate');
+          }
+          fsBtn.textContent = 'Exit';
+          document.body.classList.add('fs-active');
+        } else {
+          // attempt to exit any fullscreen, then always cleanup fallback classes
+          await exitFullscreen();
+          if (screen.orientation && screen.orientation.unlock) {
+            try { await screen.orientation.unlock(); } catch (_) {}
+          }
+          container.classList.remove('fs-rotate');
+          container.classList.remove('fs-fallback');
+          fsBtn.textContent = '↻ Fullscreen';
+          document.body.classList.remove('fs-active');
+        }
+      } catch (_) {
+        // ignore
+      }
+    });
+
+    ['fullscreenchange','webkitfullscreenchange','msfullscreenchange','mozfullscreenchange'].forEach(evt => {
+      document.addEventListener(evt, () => {
+        const inFs = isFsState();
+        fsBtn.textContent = inFs ? 'Exit' : '↻ Fullscreen';
+        if (!isFullscreen()) {
+          // ensure fallbacks are cleared when native fullscreen exits
+          container.classList.remove('fs-rotate');
+          container.classList.remove('fs-fallback');
+          document.body.classList.remove('fs-active');
+        }
+      });
+    });
+
+    // ESC key to exit
+    document.addEventListener('keydown', async (e) => {
+      if (e.key === 'Escape' && isFsState()) {
+        try { await exitFullscreen(); } catch (_) {}
+        container.classList.remove('fs-rotate');
+        container.classList.remove('fs-fallback');
+        document.body.classList.remove('fs-active');
+        fsBtn.textContent = '↻ Fullscreen';
       }
     });
   </script>

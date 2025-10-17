@@ -75,6 +75,85 @@ body {
 }
 canvas { display: block; margin: 0; width: 100%; height: 100%; }
 
+/* Fullscreen toggle button */
+.fs-toggle-btn {
+    position: fixed;
+    left: 8px;
+    top: 8px;
+    z-index: 10000;
+    padding: 10px 16px;
+    border: 1px solid #1d4ed8;
+    border-radius: 9999px;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    font-size: 17px;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+    cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .fs-toggle-btn {
+    left: 10px;
+    top: 10px;
+    padding: 14px 20px;
+    font-size: 20px;
+  }
+}
+
+/* Make the chart fill the entire screen in fullscreen mode */
+.chart-container:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    background: #fff;
+}
+/* Vendor fullscreen selectors */
+.chart-container:-webkit-full-screen {
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    background: #fff;
+}
+.chart-container:-ms-fullscreen {
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    background: #fff;
+}
+
+/* Fallback when Fullscreen API is not available */
+.chart-container.fs-fallback {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    background: #fff;
+    z-index: 9999;
+}
+
+/* CSS rotation when device won't switch to landscape */
+.chart-container.fs-rotate {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: 100vh; /* swap dims for rotation */
+    height: 100vw;
+    padding: 0;
+    background: #fff;
+    z-index: 9999;
+    transform: translate(-50%, -50%) rotate(90deg);
+    transform-origin: center center;
+}
+
+/* Hide categories (sidebar) during fullscreen */
+body.fs-active .sidebar { display: none; }
+body.fs-active .layout { grid-column-gap: 0; }
+body.fs-active .chart-wrap { grid-column: 1 / -1; }
+
 /* Rotation features removed by request */
 
 
