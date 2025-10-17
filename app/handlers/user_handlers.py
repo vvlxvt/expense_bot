@@ -85,6 +85,7 @@ async def get_month(message: Message):
     text = "За какой месяц показать статистику?"
     await message.answer(text=text, reply_markup=add_subname_kb(**LEXICON_MONTH))
 
+
 @router.message(Command(commands="charts"))
 async def charts_command(message: Message):
     keyboard = one_button_kb("Открыть график", _CHARTS_URL)

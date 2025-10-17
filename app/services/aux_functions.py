@@ -15,20 +15,40 @@ async def daily_timer():
         books.clear()
 
 
+from datetime import datetime, timedelta
+import calendar
+
+
 def get_month_range(month: str) -> tuple:
-    desired_year = datetime.now().year
-    desired_month = list(calendar.month_abbr).index(month.capitalize())
-    current_month = datetime.now().month
-    if current_month < desired_month:
+    """
+    month: сокращённое название месяца на английском, например 'jan', 'Feb', 'OCT'
+    Возвращает кортеж (start_date, end_date)
+    """
+    now = datetime.now()
+    # Приводим к первому символу заглавному, остальное строчные, чтобы совпадало с calendar.month_abbr
+    month_cap = month[:1].upper() + month[1:].lower()
+
+    if month_cap not in calendar.month_abbr:
+        raise ValueError(f"Неверный месяц: {month}")
+
+    desired_month = list(calendar.month_abbr).index(month_cap)
+    desired_year = now.year
+
+    # Если выбран месяц позже текущего — берём прошлый год
+    if desired_month > now.month:
         desired_year -= 1
+
     start_date = datetime(desired_year, desired_month, 1)
-    if desired_month == 12:
-        end_date = start_date.replace(year=desired_year, month=12, day=31)
+
+    # Если выбран текущий месяц — конец = вчерашний день
+    if desired_month == now.month:
+        end_date = now - timedelta(days=1)
+        end_date = end_date.replace(hour=23, minute=59, second=59)
     else:
-        end_date = start_date.replace(month=start_date.month + 1, day=1) - timedelta(
-            minutes=1
-        )
-    print(start_date, end_date)
+        # Для других месяцев — конец = последний день месяца
+        last_day = calendar.monthrange(desired_year, desired_month)[1]
+        end_date = datetime(desired_year, desired_month, last_day, 23, 59, 59)
+
     return start_date, end_date
 
 
@@ -62,3 +82,14 @@ def prepare_book(text: list, user_id: int) -> None:
         books[user_id].update({i: strokes})
         start += page_size
         i += 1
+
+
+if __name__ == "__main__":
+    cur_month = datetime.now().strftime("%b")
+    tests = ["Jan", "Mar", "Jun", "Oct", "Dec",cur_month]
+
+    for m in tests:
+        print(f"▶️ Testing {m}:")
+        start, end = get_month_range(m)
+        print(f"Start: {start.date()}, End: {end.date()}")
+        print("-" * 40)

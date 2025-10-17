@@ -5,11 +5,9 @@ from dateutil.relativedelta import relativedelta
 from app.services import get_month_range, get_week_range
 
 
-def get_cumulative_data(category: str):
-    today = date.today()
-    # период: от 1-го числа прошлого месяца до конца прошлого месяца
-    start_date = today.replace(day=1) - relativedelta(months=1)
-    end_date = today.replace(day=1) - relativedelta(days=1)
+def get_cumulative_data(category: str, month: str):
+
+    start_date, end_date = get_month_range(month)
 
     # получаем суммы за каждый день по категории
     result = (

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiohttp import web
@@ -43,18 +44,32 @@ def main():
     dp.startup.register(on_startup)
 
     app = web.Application()
-    aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader('templates'))
+    aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader('app/templates'))
 
     async def stats_page(request: web.Request):
-        category = request.query.get("category", "Уля")
-        days, cumulative = get_cumulative_data(category)
+        category = request.query.get("category")
+        month = request.query.get("month")
+
+        # Если нет категории — перенаправляем на категорию "Уля" и текущий месяц
+        if not category:
+            current_month = datetime.now().strftime("%B").capitalize()  # пример: "October"
+            raise web.HTTPFound(f"/stats?category=Уля&month={current_month[:3]}")
+
+        # Если месяц не указан — подставляем текущий
+        if not month:
+            month = datetime.now().strftime("%b")
+
+        days, cumulative = get_cumulative_data(category, month)
+
         return aiohttp_jinja2.render_template(
             'stats.html',
             request,
-            {"category": category,
-             "required_month": "предыдущий месяц",
-             "days": json.dumps(days),
-             "cumulative": json.dumps(cumulative)}
+            {
+                "category": category,
+                "required_month": month,
+                "days": json.dumps(days),
+                "cumulative": json.dumps(cumulative)
+            }
         )
 
     app.router.add_get('/stats', stats_page)
