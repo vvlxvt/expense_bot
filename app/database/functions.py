@@ -46,6 +46,18 @@ def get_cumulative_data(category: str, month: str):
 
     return days, cumulative
 
+
+def get_all_categories() -> list[str]:
+    # вернуть список уникальных категорий из основой таблицы
+    result = (
+        session.query(MainTable.sub_name)
+        .filter(MainTable.sub_name.isnot(None))
+        .group_by(MainTable.sub_name)
+        .order_by(MainTable.sub_name)
+        .all()
+    )
+    return [row[0] for row in result]
+
 def format_output(res: list[tuple]) -> list[str]:
     # фильтрует пустые значения из запроса по категориям за месяц
     # преобразует список кортежей в список строк

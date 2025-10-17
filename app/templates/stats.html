@@ -6,44 +6,150 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
   <style>
-  {% raw %}
     body {
         font-family: sans-serif;
         margin: 40px;
     }
-    canvas {
-        display: block;
-        margin: auto;
+    @media (max-width: 640px) {
+        body { margin: 16px; }
     }
-  {% endraw %}
+    .layout {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        grid-template-rows: auto auto 1fr auto;
+        grid-column-gap: 24px;
+        grid-row-gap: 16px;
+        align-items: start;
+    }
+    @media (max-width: 900px) {
+        .layout {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto auto auto auto;
+            grid-column-gap: 0;
+        }
+    }
+    .sidebar {
+        grid-row: 2 / span 2;
+    }
+    @media (max-width: 900px) {
+        .sidebar {
+            grid-row: auto;
+            grid-column: 1 / -1;
+        }
+    }
+    .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .btn {
+        padding: 6px 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #fafafa;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .btn.active {
+        background: #2563eb;
+        color: white;
+        border-color: #1d4ed8;
+    }
+    /* overlay months at chart baseline (bottom-right) */
+    .months-overlay {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: flex-end;
+    }
+    .chart-wrap { grid-column: 2; }
+    @media (max-width: 900px) { .chart-wrap { grid-column: 1 / -1; } }
+
+    /* Make chart responsive */
+    .chart-container {
+        position: relative;
+        width: 100%;
+        height: 520px;
+        padding-bottom: 24px; /* reserve space for month buttons below x-axis */
+    }
+    @media (max-width: 900px) {
+        .chart-container { height: 380px; padding-bottom: 20px; }
+    }
+    @media (max-width: 640px) {
+        .chart-container { height: 300px; padding-bottom: 16px; }
+    }
+    canvas { display: block; margin: 0; width: 100%; height: 100%; }
   </style>
 </head>
 <body>
-  <h2 style="text-align:center">
-    Накопительные траты {{ category }} — {{ required_month }}
-  </h2>
+  <div class="layout">
+    <h2 style="text-align:center; grid-column: 1 / -1;">
+      Накопительные траты {{ category }} — {{ required_month }}
+    </h2>
 
-  <canvas id="chart" width="1200" height="600"></canvas>
+    <aside class="sidebar">
+      <h3>Категории</h3>
+      <div class="buttons" id="categoryButtons">
+        {% for c in categories %}
+          <button class="btn{% if c == category %} active{% endif %}" data-category="{{ c }}">{{ c }}</button>
+        {% endfor %}
+      </div>
+    </aside>
 
+    <div class="chart-wrap">
+      <div class="chart-container">
+        <canvas id="chart"></canvas>
+        <div class="months-overlay" id="monthButtons">
+          {% for m in months %}
+            <button class="btn{% if m == required_month %} active{% endif %}" data-month="{{ m }}">{{ m }}</button>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="application/json" id="days-data">{{ days | safe }}</script>
+  <script type="application/json" id="totals-data">{{ cumulative | safe }}</script>
   <script>
-    const days = {{ days | safe }};
-    const totals = {{ cumulative | safe }};
-    {% raw %}
+    const days = JSON.parse(document.getElementById('days-data').textContent);
+    const totals = JSON.parse(document.getElementById('totals-data').textContent);
+    const currentCategory = "{{ category }}";
+    const currentMonth = "{{ required_month }}";
+    // derive daily totals from cumulative totals
+    const dailyTotals = totals.map((v, i) => i === 0 ? v : +(v - totals[i - 1]).toFixed(2));
+    // previous cumulative portion (so stacked bars sum to current cumulative)
+    const previousCumulative = totals.map((v, i) => i === 0 ? 0 : +(totals[i - 1]).toFixed(2));
+  </script>
+  <script>
     new Chart(document.getElementById('chart'), {
-      type: 'line',
+      type: 'bar',
       data: {
         labels: days,
-        datasets: [{
-          label: 'Cumulative expenses (₾)',
-          data: totals,
-          borderColor: 'blue',
-          fill: true,
-          backgroundColor: 'rgba(0, 0, 255, 0.1)',
-          tension: 0.1
-        }]
+        datasets: [
+          {
+            label: 'Daily (₾)',
+            data: dailyTotals,
+            backgroundColor: 'rgba(239, 68, 68, 0.6)',
+            borderColor: 'rgba(220, 38, 38, 1)',
+            borderWidth: 1,
+            stack: 'total'
+          },
+          {
+            label: 'Prev cumulative (₾)',
+            data: previousCumulative,
+            backgroundColor: 'rgba(34, 197, 94, 0.5)',
+            borderColor: 'rgba(22, 163, 74, 1)',
+            borderWidth: 1,
+            stack: 'total'
+          }
+        ]
       },
       options: {
-        responsive: false,
+        responsive: true,
+        maintainAspectRatio: false,
         plugins: {
           legend: { display: true },
           datalabels: {
@@ -55,13 +161,39 @@
           }
         },
         scales: {
-          y: { beginAtZero: true },
-          x: { title: { display: true, text: 'Day of month' } }
+          y: { beginAtZero: true, stacked: true },
+          x: { title: { display: true, text: 'Day of month', align: 'start' }, stacked: true }
         }
       },
       plugins: [ChartDataLabels]
     });
-    {% endraw %}
+  </script>
+  <script>
+    // update URL search params and navigate
+    function updateQuery(nextCategory, nextMonth) {
+      const url = new URL(window.location.href);
+      if (nextCategory) url.searchParams.set('category', nextCategory);
+      if (nextMonth) url.searchParams.set('month', nextMonth);
+      // ensure we stay on /stats
+      url.pathname = '/stats';
+      window.location.href = url.toString();
+    }
+
+    document.getElementById('categoryButtons')?.addEventListener('click', (e) => {
+      const target = e.target;
+      if (target.tagName === 'BUTTON') {
+        const value = target.getAttribute('data-category');
+        updateQuery(value, null);
+      }
+    });
+
+    document.getElementById('monthButtons')?.addEventListener('click', (e) => {
+      const target = e.target;
+      if (target.tagName === 'BUTTON') {
+        const value = target.getAttribute('data-month');
+        updateQuery(null, value);
+      }
+    });
   </script>
 </body>
 </html>

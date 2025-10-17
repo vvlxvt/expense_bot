@@ -9,7 +9,7 @@ import aiohttp_jinja2, jinja2, json
 
 from app import config
 from app.keyboards import set_main_menu
-from app.database.functions import get_cumulative_data
+from app.database.functions import get_cumulative_data, get_all_categories
 from app import handlers
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from app.services import daily_timer
@@ -60,6 +60,11 @@ def main():
             month = datetime.now().strftime("%b")
 
         days, cumulative = get_cumulative_data(category, month)
+        categories = get_all_categories()
+
+        # подготовим список месяцев как сокращения Jan..Dec
+        from calendar import month_abbr
+        months = [abbr for abbr in month_abbr if abbr]
 
         return aiohttp_jinja2.render_template(
             'stats.html',
@@ -68,7 +73,9 @@ def main():
                 "category": category,
                 "required_month": month,
                 "days": json.dumps(days),
-                "cumulative": json.dumps(cumulative)
+                "cumulative": json.dumps(cumulative),
+                "categories": categories,
+                "months": months
             }
         )
 
