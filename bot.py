@@ -80,6 +80,8 @@ def main():
         )
 
     app.router.add_get('/stats', stats_page)
+    # serve static files
+    app.router.add_static('/static/', path='app/static', name='static')
 
     webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
     webhook_handler.register(app, path=WEBHOOK_PATH)
