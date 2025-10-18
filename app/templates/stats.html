@@ -51,8 +51,8 @@
     function computeValueFontSize() {
       const isFs = document.body.classList.contains('fs-active') || document.querySelector('.chart-container')?.classList.contains('fs-rotate') || (window.matchMedia && window.matchMedia('(orientation: landscape)').matches);
       const isMobile = (window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
-      if (isFs || (isMobile && window.matchMedia('(orientation: landscape)').matches)) return 32;
-      if (isMobile) return 24;
+      if (isFs || (isMobile && window.matchMedia('(orientation: landscape)').matches)) return 24;
+      if (isMobile) return 20;
       return 16;
     }
 

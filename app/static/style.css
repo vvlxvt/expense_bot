@@ -40,7 +40,7 @@ body {
     border-radius: 6px;
     background: #fafafa;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 18px;
 }
 .btn.active {
     background: #2563eb;
