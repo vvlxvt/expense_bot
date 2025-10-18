@@ -9,7 +9,7 @@
 </head>
 <body>
   <div class="layout">
-    <h2 style="text-align:center; grid-column: 1 / -1;">
+    <h2 style="text-align:center;">
       Накопительные траты {{ category }} — {{ required_month }}
     </h2>
 
@@ -49,11 +49,17 @@
   </script>
   <script>
     function computeValueFontSize() {
-      const isFs = document.body.classList.contains('fs-active') || document.querySelector('.chart-container')?.classList.contains('fs-rotate') || (window.matchMedia && window.matchMedia('(orientation: landscape)').matches);
       const isMobile = (window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
-      if (isFs || (isMobile && window.matchMedia('(orientation: landscape)').matches)) return 24;
-      if (isMobile) return 20;
-      return 16;
+      const isLandscape = window.matchMedia && window.matchMedia('(orientation: landscape)').matches;
+      
+      // Desktop: 14px
+      if (!isMobile) return 14;
+      
+      // Mobile landscape: 14px
+      if (isMobile && isLandscape) return 14;
+      
+      // Mobile portrait: 12px
+      return 10;
     }
 
     const chart = new Chart(document.getElementById('chart'), {
