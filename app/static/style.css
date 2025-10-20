@@ -61,15 +61,22 @@ h2 {
 /* overlay months at chart baseline (bottom-right) */
 .months-overlay {
     position: absolute;
-    right: 8px;
-    bottom: 8px;
+    bottom: -30px; /* под осью X */
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
-    flex-wrap: wrap;
     gap: 6px;
-    justify-content: flex-end;
+    justify-content: space-between;
+    z-index: 10;
 }
-.chart-wrap { grid-column: 2; }
-@media (max-width: 900px) { .chart-wrap { grid-column: 1 / -1; } }
+
+.chart-wrap {
+grid-column: 2;
+}
+
+@media (max-width: 900px) {
+.chart-wrap { grid-column: 1 / -1; }
+}
 
 /* Make chart responsive */
 .chart-container {
