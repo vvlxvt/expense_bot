@@ -52,8 +52,8 @@
       const isMobile = (window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
       const isLandscape = window.matchMedia && window.matchMedia('(orientation: landscape)').matches;
       
-      // Desktop: 14px
-      if (!isMobile) return 14;
+      // Desktop: 16px
+      if (!isMobile) return 16;
       
       // Mobile landscape: 14px
       if (isMobile && isLandscape) return 14;
@@ -62,49 +62,55 @@
       return 10;
     }
 
-    const chart = new Chart(document.getElementById('chart'), {
-      type: 'bar',
-      data: {
-        labels: days,
-        datasets: [
-          {
-            label: 'Daily (₾)',
-            data: dailyTotals,
-            backgroundColor: 'rgba(239, 68, 68, 0.6)',
-            borderColor: 'rgba(220, 38, 38, 1)',
-            borderWidth: 1,
-            stack: 'total'
-          },
-          {
-            label: 'Prev cumulative (₾)',
-            data: previousCumulative,
-            backgroundColor: 'rgba(34, 197, 94, 0.5)',
-            borderColor: 'rgba(22, 163, 74, 1)',
-            borderWidth: 1,
-            stack: 'total'
-          }
-        ]
+    const init = 0;
+
+const chart = new Chart(document.getElementById('chart'), {
+  type: 'bar',
+  data: {
+    labels: days,
+    datasets: [
+      {
+        label: 'Daily (₾)',
+        data: dailyTotals,
+        backgroundColor: 'rgba(239, 68, 68, 0.6)',
+        borderColor: 'rgba(220, 38, 38, 1)',
+        borderWidth: 1,
+        stack: 'total'
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true },
-          datalabels: {
-            align: 'top',
-            anchor: 'end',
-            color: 'black',
-            font: { weight: 'bold', size: computeValueFontSize() },
-            formatter: (value) => value.toFixed(2)
+      {
+        label: 'Prev cumulative (₾)',
+        data: previousCumulative,
+        backgroundColor: 'rgba(34, 197, 94, 0.5)',
+        borderColor: 'rgba(22, 163, 74, 1)',
+        borderWidth: 1,
+        stack: 'total'
+      }
+    ]
+  },
+  options: {
+    plugins: {
+      datalabels: {
+        align: 'top',
+        anchor: 'end',
+        color: 'black',
+        font: { weight: 'bold', size: computeValueFontSize() },
+        formatter: function (value, context) {
+          // Показываем значение только если не первый столбец
+          if (context.dataIndex === 0 && value === init) {
+            return ''; // скрываем подпись
           }
-        },
-        scales: {
-          y: { beginAtZero: true, stacked: true },
-          x: { title: { display: true, text: 'Day of month', align: 'start' }, stacked: true }
+          return value.toFixed(2);
         }
-      },
-      plugins: [ChartDataLabels]
-    });
+      }
+    },
+    scales: {
+      y: { beginAtZero: true, stacked: true },
+      x: { stacked: true }
+    }
+  },
+  plugins: [ChartDataLabels]
+});
+
 
     function updateChartValueFont() {
       const size = computeValueFontSize();
