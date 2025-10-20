@@ -61,7 +61,7 @@ h2 {
 /* overlay months at chart baseline (bottom-right) */
 .months-overlay {
     position: absolute;
-    bottom: -30px; /* под осью X */
+    bottom: -10px; /* под осью X */
     left: 50%;
     transform: translateX(-50%);
     display: flex;
