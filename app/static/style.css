@@ -61,12 +61,12 @@ h2 {
 /* overlay months at chart baseline (bottom-right) */
 .months-overlay {
     position: absolute;
-    bottom: -10px; /* под осью X */
+    bottom: -20px; /* под осью X */
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     gap: 6px;
-    justify-content: space-between;
+    justify-content: center; /* центрируем кнопки */
     z-index: 10;
 }
 
@@ -89,7 +89,7 @@ grid-column: 2;
     .chart-container { height: 380px; padding-bottom: 20px; }
 }
 @media (max-width: 640px) {
-    .chart-container { height: 300px; padding-bottom: 40px; }
+    .chart-container { height: 300px; padding-bottom: 20px; }
 }
 canvas { display: block; margin: 0; width: 100%; height: 100%; }
 
@@ -101,7 +101,7 @@ canvas { display: block; margin: 0; width: 100%; height: 100%; }
     z-index: 10000;
     padding: 10px 16px;
     border: 1px solid #1d4ed8;
-    border-radius: 9999px;
+    border-radius: 5px;
     background: #2563eb;
     color: #fff;
     font-weight: 600;
@@ -119,6 +119,7 @@ canvas { display: block; margin: 0; width: 100%; height: 100%; }
     font-size: 20px;
   }
 }
+
 
 .chart-container:fullscreen,
 .chart-container:-webkit-full-screen,
