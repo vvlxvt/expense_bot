@@ -21,7 +21,6 @@ import calendar
 
 def get_month_range(month: str) -> tuple:
     """
-    month: сокращённое название месяца на английском, например 'jan', 'Feb', 'OCT'
     Возвращает кортеж (start_date, end_date)
     """
     now = datetime.now()
