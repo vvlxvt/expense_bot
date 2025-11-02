@@ -2,7 +2,7 @@ from sqlalchemy import func
 from .conn_db import session, DictTable, MainTable
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
-from app.services import get_month_range, get_week_range
+from app.services import get_month_range, get_week_range, get_previous_n_month_ranges
 
 
 def get_cumulative_data(category: str, month: str):
@@ -45,6 +45,32 @@ def get_cumulative_data(category: str, month: str):
         cumulative.append(round(total, 2))
 
     return days, cumulative
+
+
+def get_three_month_avg(category: str, month: str) -> float:
+    """
+    Средний расход по категории за предыдущие 3 месяца (по месяцам),
+    относительно выбранного месяца. Месяцы без трат учитываются как 0.
+    """
+    ranges = get_previous_n_month_ranges(month, 3)
+    monthly_totals: list[float] = []
+
+    for start_date, end_date in ranges:
+        total = (
+            session.query(func.coalesce(func.round(func.sum(MainTable.price), 2), 0))
+            .filter(MainTable.sub_name == category)
+            .filter(
+                func.DATE(MainTable.created) >= start_date,
+                func.DATE(MainTable.created) <= end_date,
+            )
+            .scalar()
+        )
+        monthly_totals.append(float(total or 0))
+
+    if not monthly_totals:
+        return 0.0
+    avg = sum(monthly_totals) / len(monthly_totals)
+    return round(avg, 2)
 
 
 def get_all_categories() -> list[str]:

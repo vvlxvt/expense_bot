@@ -37,9 +37,11 @@
 
   <script type="application/json" id="days-data">{{ days | safe }}</script>
   <script type="application/json" id="totals-data">{{ cumulative | safe }}</script>
+  <script type="application/json" id="avg3m-data">{{ avg3m | default(0) }}</script>
   <script>
     const days = JSON.parse(document.getElementById('days-data').textContent);
     const totals = JSON.parse(document.getElementById('totals-data').textContent);
+    const avg3m = parseFloat(document.getElementById('avg3m-data').textContent || '0');
     const currentCategory = "{{ category }}";
     const currentMonth = "{{ required_month }}";
     // derive daily totals from cumulative totals
@@ -84,6 +86,27 @@ const chart = new Chart(document.getElementById('chart'), {
         borderColor: 'rgba(22, 163, 74, 1)',
         borderWidth: 1,
         stack: 'total'
+      },
+      {
+        type: 'line',
+        label: 'Avg 3m (₾)',
+        data: days.map(() => avg3m),
+        borderColor: 'rgba(37, 99, 235, 1)',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        tension: 0,
+        yAxisID: 'y',
+        datalabels: {
+          align: 'end',
+          anchor: 'end',
+          color: 'rgba(37, 99, 235, 1)',
+          font: { weight: 'bold', size: computeValueFontSize() },
+          formatter: function(value, context) {
+            if (context.dataIndex !== days.length - 1) return '';
+            return `Avg 3m: ${value.toFixed(2)}`;
+          }
+        }
       }
     ]
   },
