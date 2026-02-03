@@ -4,14 +4,16 @@ from datetime import datetime
 
 @dataclass
 class Expense:
-    name: str | None
-    subname: str | None
-    price: str | float | None
-    today: datetime | None
+    # ОБЯЗАТЕЛЬНЫЕ ПОЛЯ
     raw: str
-    user_id: str | int | None
-    flag: bool | None
-    # флаг указывает добавлять ли новую категорию в словарь
+    user_id: int
+    # НЕОБЯЗАТЕЛЬНЫЕ ПОЛЯ
+    item: str | None = None
+    category: str | None = None
+    price: float | None = 0.0
+    created: datetime | None = None
+    item_id: int | None = None
+    flag: bool = False
 
     def __repr__(self):
-        return f"{self.__sizeof__()}"
+        return f"Expense(item={self.item}, price={self.price}, flag={self.flag})"

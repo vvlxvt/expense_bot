@@ -30,10 +30,6 @@ LEXICON_MONTH: dict[str, str] = {
 }
 
 
-# LEXICON_CORRECT: dict[str, str] = {
-#     'correct': 'ИСПРАВИТЬ',
-#     'add_item': 'Да'}
-
 LEXICON_COMMANDS: dict[str, str] = {
     "/del_last_note": "удалить последнюю запись",
     "/today": "траты за сегодня",
@@ -54,25 +50,6 @@ LEXICON_SUBNAMES: dict[str, str] = {
     "cancel": "ОТМЕНИТЬ",
 }
 
-# зефир
-# Уля
-# животные
-#
-# овощи фрукты молочка мясо
-# хлеб яйца п/фабрикаты крупы
-# др. продукты
-#
-# алкоголь
-# вкусняшки
-# напитки
-# бытовая химия
-# связь
-# коммуналка
-# ремонт
-# кафе
-# аптека
-# транспорт
-# услуги
 
 LEXICON_NOT_BASIC: dict[str, str] = {
     "zephyr": "зефир",
@@ -127,10 +104,12 @@ LEXICON_KEYS = {
 }
 
 
-def find_value(my_dict, search_key):
-    """ищет соответствие категории в объединенном словаре"""
-    for dic in my_dict.values():  # проверяем ключ для каждого ключа
-        for k, v in dic.items():
-            if k == search_key:
-                return dic[k]
-    return None
+def find_value(search_key: str) -> str | None:
+    """
+    Ищет текстовое название категории по ключу (callback_data).
+    Использует заранее подготовленный плоский словарь LEXICON_KEYS.
+    """
+    # .get() вернет None, если ключ не найден (например, для кнопки "correct")
+    return LEXICON_KEYS.get(search_key)
+
+print(find_value('correct'))

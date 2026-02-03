@@ -1,50 +1,60 @@
 from .expense import Expense
-from .conn_db import session, DictTable, MainTable
-from sqlalchemy.orm.exc import MultipleResultsFound
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+from .conn_db import engine, DictTable, MainTable
 
 
-def set_value(value, key):
-    # добавить значение в словарь товаров и категорий
-    prod = DictTable(
-        name=value,
-        cat=key,
+def get_or_create_item_id(session: Session, item_name: str, category_name: str = None) -> int:
+    """
+    Ищет товар в справочнике. Если нет — создает.
+    Возвращает ID записи из DictTable.
+    """
+    clean_name = item_name.strip().lower()
+
+    # 1. Пытаемся найти
+    stmt = select(DictTable).where(DictTable.item == clean_name)
+    existing_item = session.execute(stmt).scalar_one_or_none()
+
+    if existing_item:
+        # Если пришла категория (флаг был True), обновляем её
+        if category_name:
+            existing_item.category = category_name.strip().lower()
+        return existing_item.id
+
+    # 2. Если не нашли — создаем новый товар
+    new_dict_item = DictTable(
+        item=clean_name,
+        category=category_name.strip().lower() if category_name else None
     )
-    session.add(prod)
-    session.commit()
-    session.close()
+    session.add(new_dict_item)
+    session.flush()  # Чтобы получить новый ID
+    return new_dict_item.id
 
 
-def get_subname(item):
-    try:
-        stmt = session.query(DictTable.cat).filter_by(name=item).one_or_none()
-    except MultipleResultsFound as e:
-        print(
-            f"MultipleResultsFound error: {e}"
-        )  # Дополнительный код для обработки ошибки
-        stmt = session.query(DictTable.cat).filter_by(name=item).first()
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-    return stmt
+def add_new_data(instance: Expense):
+    with Session(engine) as session:
+        try:
+            # 1. Сначала разбираемся со справочником через вашу функцию
+            # Если flag=True, она обновит категорию, если False — просто найдет/создаст заготовку
+            item_id = get_or_create_item_id(
+                session,
+                instance.item,
+                instance.category if instance.flag else None
+            )
 
+            # 2. Создаем запись в MainTable
+            # Мы передаем только те данные, которые относятся к факту траты
+            new_record = MainTable(
+                price=instance.price,
+                raw=instance.raw,
+                user_id=instance.user_id,
+                item_id=item_id  # Тот самый ID, который мы только что получили
+            )
 
-def add_new_data(instance: Expense):  #
-    new_data = MainTable()
-    new_data.name = instance.name
-    new_data.sub_name = instance.subname
-    new_data.price = instance.price
-    new_data.created = instance.today
-    new_data.raw = instance.raw
-    new_data.user_id = instance.user_id
-    if instance.flag == True:
-        set_value(instance.name, instance.subname)
-    session.add(new_data)
-    session.commit()
-    session.close()
+            session.add(new_record)
+            session.commit()
 
+        except Exception as e:
+            session.rollback()
+            print(f"Ошибка сохранения: {e}")
 
-def dict_upload(dict_categories: dict):
-    with session:
-        for key, value in dict_categories.items():
-            for elem in value:
-                set_value(elem, key)
-        session.commit()

@@ -1,27 +1,28 @@
-class Queue:
+class UserQueue:
     def __init__(self):
-        self.items = []
+        # Храним данные в формате {user_id: [список_объектов]}
+        self.users = {}
 
-    def is_empty(self):
-        return len(self.items) == 0
+    def is_empty(self, user_id):
+        return len(self.users.get(user_id, [])) == 0
 
-    def queue(self, item):
-        self.items.append(item)
+    def queue(self, user_id, item):
+        if user_id not in self.users:
+            self.users[user_id] = []
+        self.users[user_id].append(item)
 
-    def dequeue(self):
-        if not self.is_empty():
-            return self.items.pop(0)  # извлекаю элемент из начала очереди
-        else:
-            return None
+    def dequeue(self, user_id):
+        if not self.is_empty(user_id):
+            return self.users[user_id].pop(0)
+        return None
 
-    def peek(self):
-        if not self.is_empty():
-            return self.items[0]
-        else:
-            return None
+    def peek(self, user_id):
+        if not self.is_empty(user_id):
+            return self.users[user_id][0]
+        return None
 
-    def clean(self):
-        self.items = []
+    def clean(self, user_id):
+        self.users[user_id] = []
 
-
-no_subs = Queue()
+# Создаем один глобальный экземпляр
+no_subs = UserQueue()

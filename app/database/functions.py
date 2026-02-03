@@ -1,4 +1,4 @@
-from sqlalchemy import func
+from sqlalchemy import func, select
 from .conn_db import session, DictTable, MainTable
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
@@ -238,28 +238,19 @@ def get_another(start_date, end_date):
 
 def del_last_note():
     """ф. удаляет из базы данных или из БД и словаря, если было добавление в словарь"""
-    table_last_id = session.query(
-        func.max(MainTable.id)
-    ).scalar()  # получаю id последней записи в таблице
-    main_name_query = (
-        session.query(MainTable).filter(MainTable.id == table_last_id).scalar()
-    )
-    main_name = main_name_query.name
 
-    dict_last_id = session.query(
-        func.max(DictTable.id)
-    ).scalar()  # получаю id последней записи в словаре
-    dict_name_query = (
-        session.query(DictTable).filter(DictTable.id == dict_last_id).scalar()
-    )
-    dict_name = dict_name_query.name
+    main_last_note = select(MainTable.name).order_by(MainTable.id.desc()).limit(1)
+    main_name = session.execute(main_last_note).scalar_one_or_none()
+
+    dict_last_note = select(DictTable.name).order_by(DictTable.id.desc()).limit(1)  # получаю id последней записи в словаре
+    dict_name = session.execute(dict_last_note).scalar_one_or_none()
 
     if dict_name == main_name:
-        session.delete(main_name_query)
-        session.delete(dict_name_query)
+        session.delete(main_last_note)
+        session.delete(dict_last_note)
         print("удалил из словаря и БД")
     else:
-        session.delete(main_name_query)
+        session.delete(main_last_note)
         print("удалил из БД")
     session.commit()
     session.close()

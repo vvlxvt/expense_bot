@@ -1,105 +1,105 @@
-import re
 from aiogram.types import CallbackQuery
-from datetime import datetime
-from app.database import no_subs, Queue, Expense, get_subname, add_new_data
-from app.lexicon.lexicon import find_value, LEXICON_CHOICE
+
+from app.database import no_subs, Queue, Expense, get_categories, add_new_data, set_value
+from app.database.interaction_db import get_category_id_by_name
+from app.lexicon.lexicon import find_value, LEXICON_CHOICE, LEXICON_KEYS
+import re
+from .expense import Expense
+from .db_manager import add_new_data, get_subname  # Предполагаем, что функции там
+from ..database.queue import UserQueue
 
 
-def make_name_price(note: str) -> tuple:
-    # парсит сообщение с тратой на товар и цену, возвращает кортеж (товар, цена)
-    pattern_1 = r"(^.+)\s(\d{0,3}[\.|,]?\d{1,2}$)"
-    pattern_2 = r"(^\d{0,3}[\.|,]?\d{1,2})\s(.+$)"
-    res_1 = re.match(pattern_1, note)
-    res_2 = re.match(pattern_2, note)
-    if isinstance(res_1, re.Match):
-        return res_1[1], res_1[2]
-    elif isinstance(res_2, re.Match):
-        return res_2[2], res_2[1]
-    else:
-        return note, 0
+def make_name_price(note: str) -> tuple[str, float]:
+    """Парсит строку на товар и цену. Возвращает (название, цена)."""
+    # Паттерны для "товар цена" и "цена товар"
+    pattern_1 = r"(^.+)\s(\d+[\.|,]?\d*)$"
+    pattern_2 = r"(^\d+[\.|,]?\d*)\s(.+)$"
+
+    res_1 = re.match(pattern_1, note.strip())
+    res_2 = re.match(pattern_2, note.strip())
+
+    try:
+        if res_1:
+            name, price_str = res_1.groups()
+        elif res_2:
+            price_str, name = res_2.groups()
+        else:
+            return note.strip(), 0.0
+
+        # Заменяем запятую на точку и приводим к float
+        price = float(price_str.replace(",", "."))
+        return name.strip(), price
+    except (ValueError, TypeError):
+        return note.strip(), 0.0
 
 
-def split_expense(message: str) -> list[str]:
-    # если сообщение многострочное, преобразует сообщение в список строк
-    res = []
-    if "\n" in message:
-        return message.split("\n")
-    else:
-        res.append(message)
-        return res
+def process_message_to_expenses(row_messages: str, user_id: int) -> str:
+    lines = row_messages.strip().split("\n")
+    results = []
 
+    for line in lines:
+        if not line.strip():
+            continue
 
-def comma_replace(num: str) -> str:
-    if "," in num:
-        num = num.replace(",", ".")
-    return num
+        # Парсим название и цену
+        item_name, price = make_name_price(line)
 
+        # Проверяем, есть ли уже этот товар в справочнике БД
+        category_name = get_subname(item_name)
 
-def make_expense(message: str, user_id: int) -> Expense:
-    # преообразует строчку с тратой в обьект Expense
-    name, price = make_name_price(message)
-    name = name.lower()
-    price = comma_replace(price)
-    today = datetime.now().replace(second=0, microsecond=0)
-    if "зефир" in name:
-        cat = "зефир"
-    else:
-        cat = get_subname(name)
-        if cat:
-            cat = cat[0]
-    return Expense(name, cat, price, today, message, user_id, False)
-
-
-def get_categories(row_messages: str, user_id: int) -> str:
-    # получаю сырое сообщение, распаршенные наименования добавляю в базу данных, вывожу их категории
-    messages = split_expense(row_messages)
-    # получаю список строк из сообщения
-    all_subnames = []
-    # создаю пустой список категорий
-    for message in messages:
-        try:
-            expense = make_expense(message, user_id)
-            if expense.subname != None:
-                add_new_data(expense)
-                all_subnames.append(expense.subname)
-            else:
-                # добавляю в очередь товаров без категории
-                no_subs.queue(
-                    (expense.name, expense.price, expense.raw),
-                )
-        except TypeError as e:
-            all_subnames.append("без категории")
-            # если сообщение не парсится оно просто записывается в столбец "сырых сообщений" raw
-            today = datetime.now().replace(second=0, microsecond=0)
+        if category_name:
+            # Сценарий А: Категория известна
             expense = Expense(
-                "без категории", "без категории", 0, today, message, user_id, False
+                raw=line,
+                user_id=user_id,
+                item=item_name,
+                price=price,
+                category=category_name,
+                flag=False
             )
             add_new_data(expense)
-            print(f"{e} не понимаю")
-    return ", ".join(all_subnames)
+            results.append(category_name)
+        else:
+            # Сценарий Б: Новый товар, категории нет
+            expense = Expense(
+                raw=line,
+                user_id=user_id,
+                item=item_name,
+                price=price,
+                category=None,
+                flag=False
+            )
+            # Сохраняем в таблицу Main (с NULL категорией в справочнике)
+            add_new_data(expense)
+
+            # Добавляем в ПЕРСОНАЛЬНУЮ очередь пользователя
+            # Передаем кортеж, чтобы функция form_expense_instance могла его распарсить
+            no_subs.queue(user_id, (expense.item, expense.price, expense.raw))
+            results.append("?")
+
+    return ", ".join(results)
 
 
-def form_expense_instance(no_subs: Queue, callback: CallbackQuery) -> Expense:
-    """преобразует траты без категории в класс Expense"""
-    name = no_subs.peek()[0]
-    sub_name = find_value(LEXICON_CHOICE, callback.data)
-    price = no_subs.peek()[1]
-    today = datetime.now().replace(second=0, microsecond=0)
-    raw_message = no_subs.peek()[2]
+def form_expense_instance(no_subs: UserQueue, callback: CallbackQuery) -> Expense | None:
     user_id = callback.from_user.id
-    flag = True
-    return Expense(name, sub_name, price, today, raw_message, user_id, flag)
 
+    # Ищем значение в "плоском" словаре LEXICON_KEYS
+    sub_name = LEXICON_KEYS.get(callback.data)
 
-# @dp.message_handler(commands=['remove_keyboard'])
-# async def remove_keyboard(message: types.Message):
-#     # Удаляем клавиатуру с предыдущего сообщения методом delete_message
-#     await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id - 1)
-#     await message.answer("Клавиатура удалена")
-#
-#
-# @dp.message_handler(commands=['edit_reply_markup'])
-# async def edit_reply_markup(message: types.Message):
-#     # Изменяем клавиатуру с предыдущего сообщения методом edit_message_reply_markup
-#     await bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=message.message_id - 1, reply_markup=None)
-#     await message.answer("Клавиатура удалена")
+    if not sub_name:
+        return None  # Если это была кнопка группы, а не категория
+
+    pending_item = no_subs.peek(user_id)
+    if not pending_item:
+        return None
+
+    name, price, raw_message = pending_item
+
+    return Expense(
+        raw=raw_message,
+        user_id=user_id,
+        item=name,
+        category=sub_name,
+        price=price,
+        flag=True  # Чтобы закрепить категорию за товаром в БД
+    )
