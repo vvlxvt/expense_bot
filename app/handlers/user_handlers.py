@@ -16,7 +16,6 @@ from app.database import (
     spend_today,
 )
 from app.filters import IsAdmin
-from bot import ADMIN_IDS
 from app.services import prepare_book, get_month_range, books
 from app.config.config import GlobalVars
 from app import config
@@ -28,7 +27,7 @@ _CHARTS_URL = f"{_BASE_WEBHOOK_URL}/stats" if _BASE_WEBHOOK_URL else "/stats"
 
 
 router: Router = Router()
-router.message.filter(IsAdmin(ADMIN_IDS))
+router.message.filter(IsAdmin(_conf.tg_bot.admin_ids))
 
 
 @router.message(CommandStart())
@@ -147,3 +146,4 @@ async def show_another(callback: CallbackQuery):
 async def cancel_add_expense(callback: CallbackQuery):
     await callback.message.edit_text(text="отмена")
     await callback.message.delete_reply_markup()
+

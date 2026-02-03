@@ -1,5 +1,7 @@
 from .queue import no_subs, UserQueue
 from .expense import Expense
+from .conn_db import engine, DictTable, MainTable
+from .interaction_db import add_new_data
 from .functions import (
     get_another,
     get_my_expenses,

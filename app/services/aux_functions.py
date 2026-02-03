@@ -1,6 +1,4 @@
 import asyncio
-from datetime import datetime, timedelta
-import calendar
 
 books = {}
 

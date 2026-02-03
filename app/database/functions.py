@@ -2,7 +2,11 @@ from sqlalchemy import func, select
 from .conn_db import session, DictTable, MainTable
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
-from app.services import get_month_range, get_week_range, get_previous_n_month_ranges
+from app.services.aux_functions import (
+    get_month_range,
+    get_week_range,
+    get_previous_n_month_ranges,
+)
 
 
 def get_cumulative_data(category: str, month: str):

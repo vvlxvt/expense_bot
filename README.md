@@ -96,5 +96,3 @@ If port 80 is unavailable on your system, change the port in `bot.py` (`WEB_SERV
 - Only users listed in `ADMIN_IDS` can interact with the bot; others will be ignored by handlers.
 - Ensure your locale/timezone are correct if daily stats appear shifted.
 
-## License
-MIT (or your preferred license).

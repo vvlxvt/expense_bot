@@ -5,12 +5,14 @@ from app.keyboards import add_subname_kb
 from app.lexicon import *
 from app.database import no_subs  # Теперь это UserQueue
 from app.filters import IsAdmin
-from bot import ADMIN_IDS
+from app import config
 from app.keyboards.pagination import create_pagination_keyboard
 from app.config.config import GlobalVars
 
 router = Router()
-router.message.filter(IsAdmin(ADMIN_IDS))
+_conf = config.load_config(None)
+_ADMIN_IDS = _conf.tg_bot.admin_ids
+router.message.filter(IsAdmin(_ADMIN_IDS))
 
 
 # Вспомогательная функция для обновления сообщения с вопросом

@@ -1,12 +1,9 @@
 from aiogram.types import CallbackQuery
-
-from app.database import no_subs, Queue, Expense, get_categories, add_new_data, set_value
-from app.database.interaction_db import get_category_id_by_name
+from app.database import no_subs,UserQueue, Expense, add_new_data, engine, DictTable
 from app.lexicon.lexicon import find_value, LEXICON_CHOICE, LEXICON_KEYS
 import re
-from .expense import Expense
-from .db_manager import add_new_data, get_subname  # Предполагаем, что функции там
-from ..database.queue import UserQueue
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 
 def make_name_price(note: str) -> tuple[str, float]:
@@ -32,6 +29,16 @@ def make_name_price(note: str) -> tuple[str, float]:
     except (ValueError, TypeError):
         return note.strip(), 0.0
 
+# def get_category_id_by_name(session: Session, name: str) -> int | None:
+#     """Вспомогательная функция для получения ID категории по имени товара."""
+#     query = select(DictTable.id).where(DictTable.name == name.strip().lower())
+#     return session.execute(query).scalar_one_or_none()
+
+def get_subname(item: str) -> str | None:
+    """Возвращает текстовое название категории (cat) для товара (name)."""
+    with Session(engine) as session:
+        query = select(DictTable.category).where(DictTable.item == item).limit(1)
+        return session.execute(query).scalar_one_or_none()
 
 def process_message_to_expenses(row_messages: str, user_id: int) -> str:
     lines = row_messages.strip().split("\n")
