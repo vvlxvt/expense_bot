@@ -1,33 +1,41 @@
 from .expense import Expense
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from .conn_db import engine, DictTable, MainTable
+from .conn_db import engine, DictTable, MainTable, CatTable
 
 
 def get_or_create_item_id(session: Session, item_name: str, category_name: str = None) -> int:
-    """
-    Ищет товар в справочнике. Если нет — создает.
-    Возвращает ID записи из DictTable.
-    """
-    clean_name = item_name.strip().lower()
+    clean_item = item_name.strip().lower()
 
-    # 1. Пытаемся найти
-    stmt = select(DictTable).where(DictTable.item == clean_name)
+    # 1. Пытаемся найти товар
+    stmt = select(DictTable).where(DictTable.item == clean_item)
     existing_item = session.execute(stmt).scalar_one_or_none()
 
     if existing_item:
-        # Если пришла категория (флаг был True), обновляем её
-        if category_name:
-            existing_item.category = category_name.strip().lower()
         return existing_item.id
 
-    # 2. Если не нашли — создаем новый товар
+    # 2. Если товара нет, ищем/создаем категорию
+    cat_id = None
+    if category_name:
+        clean_cat = category_name.strip().lower()
+        # Ищем категорию
+        cat_stmt = select(CatTable.id).where(CatTable.cat == clean_cat)
+        cat_id = session.execute(cat_stmt).scalar()
+
+        # Если категории нет в базе — создаем её (чтобы не упасть по Foreign Key)
+        if not cat_id:
+            new_cat = CatTable(cat=clean_cat)
+            session.add(new_cat)
+            session.flush()
+            cat_id = new_cat.id
+
+    # 3. Создаем новый товар
     new_dict_item = DictTable(
-        item=clean_name,
-        category=category_name.strip().lower() if category_name else None
+        item=clean_item,
+        cat_id=cat_id
     )
     session.add(new_dict_item)
-    session.flush()  # Чтобы получить новый ID
+    session.flush()
     return new_dict_item.id
 
 

@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
-from app.database import no_subs,UserQueue, Expense, add_new_data, engine, DictTable
-from app.lexicon.lexicon import find_value, LEXICON_CHOICE, LEXICON_KEYS
+from app.database import no_subs,UserQueue, Expense, add_new_data, engine, DictTable, CatTable
+from app.lexicon.lexicon import LEXICON_KEYS
 import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -35,9 +35,14 @@ def make_name_price(note: str) -> tuple[str, float]:
 #     return session.execute(query).scalar_one_or_none()
 
 def get_subname(item: str) -> str | None:
-    """Возвращает текстовое название категории (cat) для товара (name)."""
+    """Возвращает текстовое название категории (cat) для товара (item)."""
     with Session(engine) as session:
-        query = select(DictTable.category).where(DictTable.item == item).limit(1)
+        query = (
+            select(CatTable.cat)
+            .join(DictTable)  # Указываем, что таблицы связаны
+            .where(DictTable.item == item)
+            .limit(1)
+        )
         return session.execute(query).scalar_one_or_none()
 
 def process_message_to_expenses(row_messages: str, user_id: int) -> str:
@@ -91,9 +96,9 @@ def form_expense_instance(no_subs: UserQueue, callback: CallbackQuery) -> Expens
     user_id = callback.from_user.id
 
     # Ищем значение в "плоском" словаре LEXICON_KEYS
-    sub_name = LEXICON_KEYS.get(callback.data)
+    category_name = LEXICON_KEYS.get(callback.data)
 
-    if not sub_name:
+    if not category_name:
         return None  # Если это была кнопка группы, а не категория
 
     pending_item = no_subs.peek(user_id)
@@ -106,7 +111,7 @@ def form_expense_instance(no_subs: UserQueue, callback: CallbackQuery) -> Expens
         raw=raw_message,
         user_id=user_id,
         item=name,
-        category=sub_name,
+        category=category_name,
         price=price,
         flag=True  # Чтобы закрепить категорию за товаром в БД
     )
