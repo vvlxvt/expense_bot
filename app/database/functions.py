@@ -171,30 +171,25 @@ def spend_month(month):
     return result
 
 
-def get_my_expenses(user_id):
-    # получить мои траты с начала месяца
-    _month = datetime.now().month
-    _year = datetime.now().year
-    start_date = datetime(_year, _month, 1, hour=0, minute=0, second=0) - timedelta(
-        seconds=1
-    )
-    end_date = datetime.now().replace(second=0, microsecond=0)
+from datetime import datetime
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
 
-    result: list = (
-        session.query(MainTable.name,
-                      func.round(MainTable.price, 2))
-        .filter(MainTable.user_id == user_id)
-        .filter(func.DATE(MainTable.created) >= start_date,
-                func.DATE(MainTable.created) <= end_date,)
-        .all()
-    )
-    total = round(sum(item[1] if item else 0 for item in result), 2)
-    result.append(
-        (
-            "итого: ",
-            total,
+
+def get_my_expenses(session: Session, user_id: int):
+    now = datetime.now()
+    start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    stmt = (
+        select(MainTable.name, func.round(MainTable.price, 2))
+        .where(
+            MainTable.user_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= now
         )
     )
+    result = list(session.execute(stmt).all())
+    total = round(sum(price for name, price in result), 2)
+    result.append(("итого:", total))
     return result
 
 
