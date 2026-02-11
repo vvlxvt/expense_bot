@@ -1,7 +1,6 @@
 from sqlalchemy import func, select
-from .conn_db import session, DictTable, MainTable
+from .conn_db import session, DictTable, MainTable, CatTable, engine
 from datetime import datetime, timedelta, date
-from dateutil.relativedelta import relativedelta
 from app.services.aux_functions import (
     get_month_range,
     get_week_range,
@@ -79,14 +78,11 @@ def get_three_month_avg(category: str, month: str) -> float:
 
 def get_all_categories() -> list[str]:
     # вернуть список уникальных категорий из основой таблицы
-    result = (
-        session.query(MainTable.sub_name)
-        .filter(MainTable.sub_name.isnot(None))
-        .group_by(MainTable.sub_name)
-        .order_by(MainTable.sub_name)
-        .all()
-    )
-    return [row[0] for row in result]
+    query = select(CatTable.cat)
+    return [row[0] for row in query]
+
+
+
 
 def format_output(res: list[tuple]) -> list[str]:
     # фильтрует пустые значения из запроса по категориям за месяц
@@ -111,19 +107,30 @@ def get_stat_month(mm: str):
     return "\n".join(format_output(result))
 
 
-def get_stat_week(user_id):
+def get_stat_week(user_id: int):
     start_date, end_date = get_week_range()
-    result = (
-        session.query(MainTable.sub_name, func.round(func.sum(MainTable.price), 2))
-        .filter(MainTable.user_id == user_id)
-        .filter(MainTable.created >= start_date,
-                MainTable.created <= end_date)
-        .group_by(MainTable.sub_name)
-        .order_by(func.sum(MainTable.price).desc())
-        .all()
-    )
-    return "\n".join(format_output(result))
 
+    with Session(engine) as session:
+        stmt = (
+            select(
+                CatTable.cat,
+                func.round(func.sum(MainTable.price),2).label("total_price")
+            )
+            .join(DictTable, MainTable.item_id == DictTable.id)
+            .join(CatTable, DictTable.cat_id == CatTable.id)
+            .where(
+                MainTable.user_id == user_id,
+                MainTable.created >= start_date,
+                MainTable.created <= end_date
+            )
+            .group_by(CatTable.cat)
+            .order_by(func.sum(MainTable.price).desc())
+        )
+
+    result = session.execute(stmt).all()
+
+    # Форматируем вывод
+    return "\n".join(format_output(result))
 
 def spend_today(user_id):
     """
