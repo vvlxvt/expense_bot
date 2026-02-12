@@ -9,8 +9,6 @@ from app.services.aux_functions import (
 )
 
 
-
-
 def get_cumulative_data(category: str, month: str):
 
     start_date, end_date = get_month_range(month)
@@ -19,7 +17,7 @@ def get_cumulative_data(category: str, month: str):
     result = (
         session.query(
             func.DATE(MainTable.created).label("day"),
-            func.round(func.sum(MainTable.price), 2).label("daily_total")
+            func.round(func.sum(MainTable.price), 2).label("daily_total"),
         )
         .filter(MainTable.sub_name == category)
         .filter(
@@ -44,6 +42,7 @@ def get_cumulative_data(category: str, month: str):
         day_value = r.day
         if isinstance(day_value, str):
             from datetime import datetime
+
             day_value = datetime.strptime(day_value, "%Y-%m-%d").date()
 
         days.append(day_value.day)
@@ -85,12 +84,20 @@ def get_all_categories() -> list[str]:
     return [row[0] for row in query]
 
 
-def format_output(res: list[tuple]) -> list[str]:
-    # фильтрует пустые значения из запроса по категориям за месяц
-    # преобразует список кортежей в список строк
-    filtered_res = [(key, value) for key, value in res if value is not None]
-    formatted_res = [f"{key}: {value}" for key, value in filtered_res]
-    return formatted_res
+def format_output(res: list[tuple], width: int = 15) -> list[str]:
+    """
+    Преобразует кортежи в строки с выравниванием второго значения столбиком.
+    :param width: расстояние от начала строки до второго столбца
+    """
+
+    filtered = [(k, v) for k, v in res if v is not None]
+    if not filtered:
+        return ["Трат нет"]
+
+    # Находим длину самого длинного ключа
+    max_len = max(len(str(key)) for key, _ in filtered)
+
+    return [f"{key:.<{max_len + 3}} : {value}" for key, value in filtered]
 
 
 def get_stat_month(mm: str):
@@ -104,14 +111,11 @@ def get_stat_month(mm: str):
         stmt = (
             select(
                 CatTable.cat,
-                func.round(func.sum(MainTable.price),2).label("total_price")
+                func.round(func.sum(MainTable.price), 2).label("total_price"),
             )
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
-            .where(
-                MainTable.created >=start_date,
-                MainTable.created <= end_date
-            )
+            .where(MainTable.created >= start_date, MainTable.created <= end_date)
             .group_by(CatTable.cat)
             .order_by(func.sum(MainTable.price).desc())
         )
@@ -130,14 +134,14 @@ def get_stat_week(user_id: int) -> list[tuple]:
         stmt = (
             select(
                 CatTable.cat,
-                func.round(func.sum(MainTable.price),2).label("total_price")
+                func.round(func.sum(MainTable.price), 2).label("total_price"),
             )
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
             .where(
                 MainTable.user_id == user_id,
                 MainTable.created >= start_date,
-                MainTable.created <= end_date
+                MainTable.created <= end_date,
             )
             .group_by(CatTable.cat)
             .order_by(func.sum(MainTable.price).desc())
@@ -155,16 +159,13 @@ def spend_today(user_id) -> float:
     start_date = datetime.combine(datetime.today(), time.min)
 
     with Session(engine) as session:
-        stmt = (
-            select(func.sum(MainTable.price))
-            .where(
-                MainTable.user_id == user_id,
-                MainTable.created >= start_date
-            )
+        stmt = select(func.sum(MainTable.price)).where(
+            MainTable.user_id == user_id, MainTable.created >= start_date
         )
-        result=session.execute(stmt).scalar()
+        result = session.execute(stmt).scalar()
         print(result)
     return result
+
 
 def spend_week(user_id):
     """
@@ -172,52 +173,56 @@ def spend_week(user_id):
     :return: The amount of money spent current week
     """
     start_date, end_date = get_week_range()
-    result = (
-        session.query(func.sum(MainTable.price))
-        .filter(MainTable.user_id == user_id)
-        .filter(
-            func.DATE(MainTable.created) >= start_date,
-            func.DATE(MainTable.created) <= end_date,
+    with Session(engine) as session:
+        stmt = select(func.sum(MainTable.price)).where(
+            MainTable.user_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= end_date,
         )
-        .scalar()
-    )
-    print(result)
+        result = session.execute(stmt).scalar()
+
     return result
 
 
 def spend_month(month):
     start_date, end_date = get_month_range(month)
-    result = (
-        session.query(func.round(func.sum(MainTable.price), 2))
-        .filter(
-            func.DATE(MainTable.created) >= start_date,
-            func.DATE(MainTable.created) <= end_date,
+    with Session(engine) as session:
+        stmt = select(func.sum(MainTable.price)).where(
+            MainTable.created >= start_date, MainTable.created <= end_date
         )
-        .scalar()
-    )
+        result = session.execute(stmt).scalar()
     return result
 
 
+def get_my_expenses(user_id: int):
+    """
+    получить все траты с начала месяца портянкой с пагинацией
+    """
+    with Session(engine) as session:
+        now = datetime.now()
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-def get_my_expenses(session: Session, user_id: int):
-    now = datetime.now()
-    start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    stmt = (
-        select(MainTable.name, func.round(MainTable.price, 2))
-        .where(
-            MainTable.user_id == user_id,
-            MainTable.created >= start_date,
-            MainTable.created <= now
+        stmt = (
+            select(CatTable.cat, func.round(func.sum(MainTable.price), 2))
+            .join(DictTable, MainTable.item_id == DictTable.id)
+            .join(CatTable, DictTable.cat_id == CatTable.id)
+            .where(
+                MainTable.user_id == user_id,
+                MainTable.created >= start_date,
+                MainTable.created <= now,
+            )
+            .group_by(CatTable.cat)
+            .order_by(func.sum(MainTable.price).desc())
         )
-    )
-    result = list(session.execute(stmt).all())
-    total = round(sum(price for name, price in result), 2)
-    result.append(("итого:", total))
+        print(session.execute(stmt).all())
+        result = session.execute(stmt).all()
+        total = round(sum(price for cat, price in result), 2)
+        result.append(("итого:", total))
     return result
 
 
 def get_my_expenses_group(user_id):
-    # получить мои траты с начала месяца
+    # получить мои траты с начала месяца сгруппированными
     _month = datetime.now().month
     _year = datetime.now().year
     start_date = datetime(_year, _month, 1, hour=0, minute=0, second=0) - timedelta(
@@ -225,17 +230,21 @@ def get_my_expenses_group(user_id):
     )
     end_date = datetime.now().replace(second=0, microsecond=0)
 
-    result = (
-        session.query(MainTable.sub_name, func.round(func.sum(MainTable.price), 2))
-        .filter(MainTable.user_id == user_id)
-        .filter(
-            func.DATE(MainTable.created) >= start_date,
-            func.DATE(MainTable.created) <= end_date,
+    with Session(engine) as session:
+        stmt = (
+            select(CatTable.cat, func.round(func.sum(MainTable.price), 2))
+            .join(DictTable, MainTable.item_id == DictTable.id)
+            .join(CatTable, DictTable.cat_id == CatTable.id)
+            .where(
+                MainTable.user_id == user_id,
+                MainTable.created >= start_date,
+                MainTable.created <= end_date,
+            )
+            .group_by(CatTable.cat)
+            .order_by(func.sum(MainTable.price).desc())
         )
-        .group_by(MainTable.sub_name)
-        .order_by(func.sum(MainTable.price).desc())
-        .all()
-    )
+        result = session.execute(stmt).all()
+
     total = round(sum(item[1] if item else 0 for item in result), 2)
     result.append(
         (
@@ -259,21 +268,31 @@ def get_another(start_date, end_date):
 
 
 def del_last_note():
-    """ф. удаляет из базы данных или из БД и словаря, если было добавление в словарь"""
+    with Session(engine) as session:
+        # 1. Находим последнюю запись в основной таблице
+        # Подгружаем связанный объект item сразу, чтобы не делать лишних запросов
+        stmt = select(MainTable).order_by(MainTable.id.desc()).limit(1)
+        last_note = session.execute(stmt).scalar_one_or_none()
 
-    main_last_note = select(MainTable.name).order_by(MainTable.id.desc()).limit(1)
-    main_name = session.execute(main_last_note).scalar_one_or_none()
+        if not last_note:
+            print("База данных пуста")
+            return None
 
-    dict_last_note = select(DictTable.name).order_by(DictTable.id.desc()).limit(1)  # получаю id последней записи в словаре
-    dict_name = session.execute(dict_last_note).scalar_one_or_none()
+        # Сохраняем информацию для возврата
+        item_name = "Неизвестно"
 
-    if dict_name == main_name:
-        session.delete(main_last_note)
-        session.delete(dict_last_note)
-        print("удалил из словаря и БД")
-    else:
-        session.delete(main_last_note)
-        print("удалил из БД")
-    session.commit()
-    session.close()
-    return main_name
+        # 2. Получаем объект из DictTable по ForeignKey
+        stmt_dict = select(DictTable).where(DictTable.id == last_note.item_id)
+        dict_entry = session.execute(stmt_dict).scalar_one_or_none()
+
+        if dict_entry:
+            item_name = dict_entry.item
+            session.delete(last_note)
+            session.delete(dict_entry)
+            print(f"Удалено из БД и словаря: ...{item_name}")
+        else:
+            session.delete(last_note)
+            print("Запись в MainTable удалена, связанный item не найден")
+
+        session.commit()
+        return item_name

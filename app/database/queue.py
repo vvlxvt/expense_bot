@@ -24,5 +24,6 @@ class UserQueue:
     def clean(self, user_id):
         self.users[user_id] = []
 
+
 # Создаем один глобальный экземпляр
 no_subs = UserQueue()

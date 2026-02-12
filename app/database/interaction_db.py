@@ -4,7 +4,9 @@ from sqlalchemy import select
 from .conn_db import engine, DictTable, MainTable, CatTable
 
 
-def get_or_create_item_id(session: Session, item_name: str, category_name: str = None) -> int:
+def get_or_create_item_id(
+    session: Session, item_name: str, category_name: str = None
+) -> int:
     clean_item = item_name.strip().lower()
 
     # 1. Пытаемся найти товар
@@ -30,10 +32,7 @@ def get_or_create_item_id(session: Session, item_name: str, category_name: str =
             cat_id = new_cat.id
 
     # 3. Создаем новый товар
-    new_dict_item = DictTable(
-        item=clean_item,
-        cat_id=cat_id
-    )
+    new_dict_item = DictTable(item=clean_item, cat_id=cat_id)
     session.add(new_dict_item)
     session.flush()
     return new_dict_item.id
@@ -45,9 +44,7 @@ def add_new_data(instance: Expense):
             # 1. Сначала разбираемся со справочником через вашу функцию
             # Если flag=True, она обновит категорию, если False — просто найдет/создаст заготовку
             item_id = get_or_create_item_id(
-                session,
-                instance.item,
-                instance.category if instance.flag else None
+                session, instance.item, instance.category if instance.flag else None
             )
 
             # 2. Создаем запись в MainTable
@@ -56,7 +53,7 @@ def add_new_data(instance: Expense):
                 price=instance.price,
                 raw=instance.raw,
                 user_id=instance.user_id,
-                item_id=item_id  # Тот самый ID, который мы только что получили
+                item_id=item_id,  # Тот самый ID, который мы только что получили
             )
 
             session.add(new_record)
@@ -65,4 +62,3 @@ def add_new_data(instance: Expense):
         except Exception as e:
             session.rollback()
             print(f"Ошибка сохранения: {e}")
-
