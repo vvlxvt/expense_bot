@@ -1,11 +1,14 @@
-from sqlalchemy import func, select
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
 from .conn_db import session, DictTable, MainTable, CatTable, engine
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 from app.services.aux_functions import (
     get_month_range,
     get_week_range,
     get_previous_n_month_ranges,
 )
+
+
 
 
 def get_cumulative_data(category: str, month: str):
@@ -82,8 +85,6 @@ def get_all_categories() -> list[str]:
     return [row[0] for row in query]
 
 
-
-
 def format_output(res: list[tuple]) -> list[str]:
     # фильтрует пустые значения из запроса по категориям за месяц
     # преобразует список кортежей в список строк
@@ -93,21 +94,36 @@ def format_output(res: list[tuple]) -> list[str]:
 
 
 def get_stat_month(mm: str):
+    """
+    :param user_id: telegram user_id
+    :return: cumulative expenses by category for the chosen month
+    """
     start_date, end_date = get_month_range(mm)
-    result = (
-        session.query(MainTable.sub_name, func.round(func.sum(MainTable.price), 2))
-        .filter(
-            func.DATE(MainTable.created) >= start_date,
-            func.DATE(MainTable.created) <= end_date,
+
+    with Session(engine) as session:
+        stmt = (
+            select(
+                CatTable.cat,
+                func.round(func.sum(MainTable.price),2).label("total_price")
+            )
+            .join(DictTable, MainTable.item_id == DictTable.id)
+            .join(CatTable, DictTable.cat_id == CatTable.id)
+            .where(
+                MainTable.created >=start_date,
+                MainTable.created <= end_date
+            )
+            .group_by(CatTable.cat)
+            .order_by(func.sum(MainTable.price).desc())
         )
-        .group_by(MainTable.sub_name)
-        .order_by(func.sum(MainTable.price).desc())
-        .all()
-    )
+        result = session.execute(stmt).all()
     return "\n".join(format_output(result))
 
 
-def get_stat_week(user_id: int):
+def get_stat_week(user_id: int) -> list[tuple]:
+    """
+    :param user_id: telegram user_id
+    :return: cumulative expenses by category for the current week
+    """
     start_date, end_date = get_week_range()
 
     with Session(engine) as session:
@@ -127,31 +143,34 @@ def get_stat_week(user_id: int):
             .order_by(func.sum(MainTable.price).desc())
         )
 
-    result = session.execute(stmt).all()
-
-    # Форматируем вывод
+        result = session.execute(stmt).all()
     return "\n".join(format_output(result))
 
-def spend_today(user_id):
+
+def spend_today(user_id) -> float:
     """
     :param user_id: telegram user_id
     :return: The amount of money spent today
     """
-    start_date = datetime.today().date()
-    end_date = datetime.now().replace(second=0, microsecond=0)
-    result = (
-        session.query(func.round(func.sum(MainTable.price), 2))
-        .filter(MainTable.user_id == user_id)
-        .filter(
-            func.DATE(MainTable.created) >= start_date,
-            func.DATE(MainTable.created) <= end_date,
+    start_date = datetime.combine(datetime.today(), time.min)
+
+    with Session(engine) as session:
+        stmt = (
+            select(func.sum(MainTable.price))
+            .where(
+                MainTable.user_id == user_id,
+                MainTable.created >= start_date
+            )
         )
-        .scalar()
-    )
+        result=session.execute(stmt).scalar()
+        print(result)
     return result
 
-
 def spend_week(user_id):
+    """
+    :param user_id: telegram user_id
+    :return: The amount of money spent current week
+    """
     start_date, end_date = get_week_range()
     result = (
         session.query(func.sum(MainTable.price))
@@ -162,6 +181,7 @@ def spend_week(user_id):
         )
         .scalar()
     )
+    print(result)
     return result
 
 
@@ -177,10 +197,6 @@ def spend_month(month):
     )
     return result
 
-
-from datetime import datetime
-from sqlalchemy import select, func
-from sqlalchemy.orm import Session
 
 
 def get_my_expenses(session: Session, user_id: int):
