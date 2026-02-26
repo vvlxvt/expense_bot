@@ -13,23 +13,47 @@ def get_or_create_item_id(
     stmt = select(DictTable).where(DictTable.item == clean_item)
     existing_item = session.execute(stmt).scalar_one_or_none()
 
+    # Если товар уже есть в справочнике
     if existing_item:
+        # Пришел новый выбор категории (после ручного выбора в боте)
+        if category_name:
+            clean_cat = category_name.strip().lower()
+
+            # Ищем/создаем категорию
+            cat_stmt = select(CatTable.id).where(CatTable.cat == clean_cat)
+            cat_id = session.execute(cat_stmt).scalar()
+
+            if not cat_id:
+                new_cat = CatTable(cat=clean_cat)
+                session.add(new_cat)
+                session.flush()
+                cat_id = new_cat.id
+
+            # Обновляем категорию у уже существующего товара, если она ещё не проставлена
+            if existing_item.cat_id != cat_id:
+                existing_item.cat_id = cat_id
+                session.flush()
+
         return existing_item.id
 
-    # 2. Если товара нет, ищем/создаем категорию
-    cat_id = None
+    # 2. Если товара нет, ищем/создаем категорию (по возможности)
+    # Если категории нет (новый товар, еще не классифицирован) — используем
+    # специальную категорию "без категории".
     if category_name:
         clean_cat = category_name.strip().lower()
-        # Ищем категорию
-        cat_stmt = select(CatTable.id).where(CatTable.cat == clean_cat)
-        cat_id = session.execute(cat_stmt).scalar()
+    else:
+        clean_cat = "без категории"
 
-        # Если категории нет в базе — создаем её (чтобы не упасть по Foreign Key)
-        if not cat_id:
-            new_cat = CatTable(cat=clean_cat)
-            session.add(new_cat)
-            session.flush()
-            cat_id = new_cat.id
+    # Ищем категорию
+    cat_stmt = select(CatTable.id).where(CatTable.cat == clean_cat)
+    cat_id = session.execute(cat_stmt).scalar()
+
+    # Если категории нет в базе — создаем её (чтобы не упасть по Foreign Key)
+    if not cat_id:
+        new_cat = CatTable(cat=clean_cat)
+        session.add(new_cat)
+        session.flush()
+        cat_id = new_cat.id
 
     # 3. Создаем новый товар
     new_dict_item = DictTable(item=clean_item, cat_id=cat_id)
@@ -41,7 +65,7 @@ def get_or_create_item_id(
 def add_new_data(instance: Expense):
     with Session(engine) as session:
         try:
-            # 1. Сначала разбираемся со справочником через вашу функцию
+            # 1. Сначала разбираемся со справочником через функцию
             # Если flag=True, она обновит категорию, если False — просто найдет/создаст заготовку
             item_id = get_or_create_item_id(
                 session, instance.item, instance.category if instance.flag else None

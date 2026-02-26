@@ -203,7 +203,7 @@ def get_my_expenses(user_id: int):
         start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
         stmt = (
-            select(CatTable.cat, func.round(func.sum(MainTable.price), 2))
+            select(DictTable.item, MainTable.price)
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
             .where(
@@ -211,12 +211,9 @@ def get_my_expenses(user_id: int):
                 MainTable.created >= start_date,
                 MainTable.created <= now,
             )
-            .group_by(CatTable.cat)
-            .order_by(func.sum(MainTable.price).desc())
         )
-        print(session.execute(stmt).all())
         result = session.execute(stmt).all()
-        total = round(sum(price for cat, price in result), 2)
+        total = round(sum(r[1] for r in result), 2)
         result.append(("итого:", total))
     return result
 

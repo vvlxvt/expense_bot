@@ -50,7 +50,9 @@ async def process_help_command(message: Message):
     await message.answer(text=f" <b>{text}</b>\n {books[user_id][page]} ")
 
 
-@router.message(Command(commands="del_last_note"),)
+@router.message(
+    Command(commands="del_last_note"),
+)
 async def del_note(message: Message):
     last = del_last_note()
     text = "удалена запись: "
@@ -96,7 +98,6 @@ async def get_month(message: Message):
     user_id = message.from_user.id
     result = get_my_expenses(user_id)
     prepare_book(result, user_id)
-    print(books)
     gv = GlobalVars(user_id)
     gv.page = 1
     text = "Все мои траты с начала месяца: "
@@ -146,4 +147,3 @@ async def show_another(callback: CallbackQuery):
 async def cancel_add_expense(callback: CallbackQuery):
     await callback.message.edit_text(text="отмена")
     await callback.message.delete_reply_markup()
-

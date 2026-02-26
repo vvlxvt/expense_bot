@@ -16,4 +16,4 @@ class Expense:
     flag: bool = False
 
     def __repr__(self):
-        return f"Expense(item={self.item}, price={self.price}, flag={self.flag})"
+        return f"Expense(item={self.item}, price={self.price}, category={self.category}, flag={self.flag})"

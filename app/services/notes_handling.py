@@ -1,5 +1,13 @@
 from aiogram.types import CallbackQuery
-from app.database import no_subs,UserQueue, Expense, add_new_data, engine, DictTable, CatTable
+from app.database import (
+    no_subs,
+    UserQueue,
+    Expense,
+    add_new_data,
+    engine,
+    DictTable,
+    CatTable,
+)
 from app.lexicon.lexicon import LEXICON_KEYS
 import re
 from sqlalchemy import select
@@ -29,21 +37,25 @@ def make_name_price(note: str) -> tuple[str, float]:
     except (ValueError, TypeError):
         return note.strip(), 0.0
 
+
 # def get_category_id_by_name(session: Session, name: str) -> int | None:
 #     """Вспомогательная функция для получения ID категории по имени товара."""
 #     query = select(DictTable.id).where(DictTable.name == name.strip().lower())
 #     return session.execute(query).scalar_one_or_none()
 
+
 def get_subname(item: str) -> str | None:
     """Возвращает текстовое название категории (cat) для товара (item)."""
+    clean_item = item.strip().lower()
     with Session(engine) as session:
         query = (
             select(CatTable.cat)
-            .join(DictTable)  # Указываем, что таблицы связаны
-            .where(DictTable.item == item)
+            .join(DictTable)  # связь по ForeignKey DictTable.cat_id
+            .where(DictTable.item == clean_item)
             .limit(1)
         )
         return session.execute(query).scalar_one_or_none()
+
 
 def process_message_to_expenses(row_messages: str, user_id: int) -> str:
     lines = row_messages.strip().split("\n")
@@ -67,7 +79,7 @@ def process_message_to_expenses(row_messages: str, user_id: int) -> str:
                 item=item_name,
                 price=price,
                 category=category_name,
-                flag=False
+                flag=False,
             )
             add_new_data(expense)
             results.append(category_name)
@@ -79,7 +91,7 @@ def process_message_to_expenses(row_messages: str, user_id: int) -> str:
                 item=item_name,
                 price=price,
                 category=None,
-                flag=False
+                flag=False,
             )
             # Сохраняем в таблицу Main (с NULL категорией в справочнике)
             add_new_data(expense)
@@ -87,12 +99,13 @@ def process_message_to_expenses(row_messages: str, user_id: int) -> str:
             # Добавляем в ПЕРСОНАЛЬНУЮ очередь пользователя
             # Передаем кортеж, чтобы функция form_expense_instance могла его распарсить
             no_subs.queue(user_id, (expense.item, expense.price, expense.raw))
-            results.append("?")
 
-    return ", ".join(results)
+    return ", ".join(results) or None
 
 
-def form_expense_instance(no_subs: UserQueue, callback: CallbackQuery) -> Expense | None:
+def form_expense_instance(
+    no_subs: UserQueue, callback: CallbackQuery
+) -> Expense | None:
     user_id = callback.from_user.id
 
     # Ищем значение в "плоском" словаре LEXICON_KEYS
@@ -113,5 +126,5 @@ def form_expense_instance(no_subs: UserQueue, callback: CallbackQuery) -> Expens
         item=name,
         category=category_name,
         price=price,
-        flag=True  # Чтобы закрепить категорию за товаром в БД
+        flag=True,  # Чтобы закрепить категорию за товаром в БД
     )
