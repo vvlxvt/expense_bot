@@ -88,24 +88,26 @@ const chart = new Chart(document.getElementById('chart'), {
         stack: 'total'
       },
       {
-        type: 'line',
-        label: 'Avg 3m (₾)',
-        data: days.map(() => avg3m),
-        borderColor: 'rgba(37, 99, 235, 1)',
-        borderWidth: 2,
-        borderDash: [6, 4],
-        pointRadius: 0,
-        tension: 0,
-        yAxisID: 'y',
-        datalabels: {
-          align: 'end',
-          anchor: 'end',
-          color: 'rgba(37, 99, 235, 1)',
-          font: { weight: 'bold', size: computeValueFontSize() },
-          formatter: function(value, context) {
-            if (context.dataIndex !== days.length - 1) return '';
-            return `Avg 3m: ${value.toFixed(2)}`;
-          }
+  type: 'line',
+  label: 'Avg 3m (₾)',
+  data: days.map(() => avg3m),
+  borderColor: 'rgba(37, 99, 235, 1)',
+  borderWidth: 2,
+  borderDash: [6, 4],
+  pointRadius: 0,
+  tension: 0,
+  yAxisID: 'y',
+  datalabels: {
+    align: 'start',
+    anchor: 'end',
+    offset: 6,
+    color: 'rgba(37, 99, 235, 1)',
+    font: { weight: 'bold', size: computeValueFontSize() },
+    formatter: function(value, context) {
+      const middleIndex = Math.floor(days.length / 2);
+      if (context.dataIndex !== middleIndex) return '';
+      return `Avg 3m: ${value.toFixed(2)}`;
+    }
         }
       }
     ]

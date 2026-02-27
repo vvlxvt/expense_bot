@@ -9,40 +9,42 @@ from app.services.aux_functions import (
 )
 
 
-def get_cumulative_data(category: str, month: str):
+from sqlalchemy import select, func
+from datetime import datetime
 
+
+def get_cumulative_data(category: str, month: str):
     start_date, end_date = get_month_range(month)
 
-    # получаем суммы за каждый день по категории
-    result = (
-        session.query(
-            func.DATE(MainTable.created).label("day"),
-            func.round(func.sum(MainTable.price), 2).label("daily_total"),
+    with Session(engine) as session:
+        stmt = (
+            select(
+                func.date(MainTable.created).label("day"),
+                func.round(func.sum(MainTable.price), 2).label("daily_total"),
+            )
+            .join(DictTable, MainTable.item_id == DictTable.id)
+            .join(CatTable, DictTable.cat_id == CatTable.id)
+            .where(
+                CatTable.cat == category,
+                MainTable.created.between(start_date, end_date),
+            )
+            .group_by(func.date(MainTable.created))
+            .order_by(func.date(MainTable.created))
         )
-        .filter(MainTable.sub_name == category)
-        .filter(
-            func.DATE(MainTable.created) >= start_date,
-            func.DATE(MainTable.created) <= end_date,
-        )
-        .group_by(func.DATE(MainTable.created))
-        .order_by(func.DATE(MainTable.created))
-        .all()
-    )
-    # если нет данных — вернуть пустое
+
+        result = session.execute(stmt).all()
+
     if not result:
         return [], []
 
-    # создаём списки для графика
     days = []
     cumulative = []
     total = 0
 
     for r in result:
-        # если база вернула строку — превращаем её в date
         day_value = r.day
-        if isinstance(day_value, str):
-            from datetime import datetime
 
+        if isinstance(day_value, str):
             day_value = datetime.strptime(day_value, "%Y-%m-%d").date()
 
         days.append(day_value.day)
@@ -60,28 +62,34 @@ def get_three_month_avg(category: str, month: str) -> float:
     ranges = get_previous_n_month_ranges(month, 3)
     monthly_totals: list[float] = []
 
-    for start_date, end_date in ranges:
-        total = (
-            session.query(func.coalesce(func.round(func.sum(MainTable.price), 2), 0))
-            .filter(MainTable.sub_name == category)
-            .filter(
-                func.DATE(MainTable.created) >= start_date,
-                func.DATE(MainTable.created) <= end_date,
+    with Session(engine) as session:
+        for start_date, end_date in ranges:
+            stmt = (
+                select(func.coalesce(func.sum(MainTable.price), 0))
+                .join(DictTable, MainTable.item_id == DictTable.id)
+                .join(CatTable, DictTable.cat_id == CatTable.id)
+                .where(
+                    CatTable.cat == category,
+                    MainTable.created.between(start_date, end_date),
+                )
             )
-            .scalar()
-        )
-        monthly_totals.append(float(total or 0))
+
+            total = session.execute(stmt).scalar()
+            monthly_totals.append(float(total))
 
     if not monthly_totals:
         return 0.0
+
     avg = sum(monthly_totals) / len(monthly_totals)
     return round(avg, 2)
 
 
 def get_all_categories() -> list[str]:
     # вернуть список уникальных категорий из основой таблицы
-    query = select(CatTable.cat)
-    return [row[0] for row in query]
+    with Session(engine) as session:
+        stmt = select(CatTable.cat)
+        result = session.execute(stmt).all()
+        return [row[0] for row in result]
 
 
 def format_output(res: list[tuple], width: int = 15) -> list[str]:
@@ -97,10 +105,10 @@ def format_output(res: list[tuple], width: int = 15) -> list[str]:
     # Находим длину самого длинного ключа
     max_len = max(len(str(key)) for key, _ in filtered)
 
-    return [f"{key:.<{max_len + 3}} : {value}" for key, value in filtered]
+    return [f"{key:.<{max_len + 3}} {value}" for key, value in filtered]
 
 
-def get_stat_month(mm: str):
+def get_stat_month(user_id, mm: str):
     """
     :param user_id: telegram user_id
     :return: cumulative expenses by category for the chosen month
@@ -115,7 +123,11 @@ def get_stat_month(mm: str):
             )
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
-            .where(MainTable.created >= start_date, MainTable.created <= end_date)
+            .where(
+                MainTable.user_id == user_id,
+                MainTable.created >= start_date,
+                MainTable.created <= end_date,
+            )
             .group_by(CatTable.cat)
             .order_by(func.sum(MainTable.price).desc())
         )
@@ -184,11 +196,13 @@ def spend_week(user_id):
     return result
 
 
-def spend_month(month):
+def spend_month(user_id, month):
     start_date, end_date = get_month_range(month)
     with Session(engine) as session:
-        stmt = select(func.sum(MainTable.price)).where(
-            MainTable.created >= start_date, MainTable.created <= end_date
+        stmt = select(func.round(func.sum(MainTable.price)), 2).where(
+            MainTable.user_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= end_date,
         )
         result = session.execute(stmt).scalar()
     return result
@@ -252,44 +266,79 @@ def get_my_expenses_group(user_id):
     return "\n".join(format_output(result))
 
 
-def get_another(start_date, end_date):
-    # вывести траты из категории Другое
-    result = (
-        session.query(MainTable.name, func.round(MainTable.price, 2))
-        .filter(MainTable.created.between(start_date, end_date))
-        .filter(MainTable.sub_name.in_(["другое", "др. продукты"]))
-        .order_by(MainTable.price.desc())
-        .all()
-    )
+def get_another(user_id, start_date, end_date):
+    with Session(engine) as session:
+        stmt = (
+            select(DictTable.item, func.round(MainTable.price, 2).label("price"))
+            .join(DictTable, MainTable.item_id == DictTable.id)
+            .join(CatTable, DictTable.cat_id == CatTable.id)
+            .where(
+                MainTable.user_id == user_id,
+                CatTable.cat == "др. продукты",
+                MainTable.created.between(start_date, end_date),
+            )
+        )
+
+        total_stmt = (
+            select(func.round(func.sum(MainTable.price), 2))
+            .join(DictTable, MainTable.item_id == DictTable.id)
+            .join(CatTable, DictTable.cat_id == CatTable.id)
+            .where(
+                MainTable.user_id == user_id,
+                CatTable.cat == "др. продукты",
+                MainTable.created.between(start_date, end_date),
+            )
+        )
+
+        result = session.execute(stmt).all()
+        total = session.execute(total_stmt).scalar() or 0
+
+        result.append(("итого:", total))
+
     return "\n".join(format_output(result))
+
+
+from sqlalchemy import select, func
 
 
 def del_last_note():
     with Session(engine) as session:
-        # 1. Находим последнюю запись в основной таблице
-        # Подгружаем связанный объект item сразу, чтобы не делать лишних запросов
-        stmt = select(MainTable).order_by(MainTable.id.desc()).limit(1)
-        last_note = session.execute(stmt).scalar_one_or_none()
+        # 1️⃣ получаем последнюю запись
+        last_stmt = select(MainTable).order_by(MainTable.id.desc()).limit(1)
 
-        if not last_note:
+        main_obj = session.execute(last_stmt).scalar_one_or_none()
+
+        if not main_obj:
             print("База данных пуста")
             return None
 
-        # Сохраняем информацию для возврата
-        item_name = "Неизвестно"
+        item_id = main_obj.item_id
 
-        # 2. Получаем объект из DictTable по ForeignKey
-        stmt_dict = select(DictTable).where(DictTable.id == last_note.item_id)
-        dict_entry = session.execute(stmt_dict).scalar_one_or_none()
+        # 2️⃣ проверяем через HAVING, единственное ли использование
+        having_stmt = (
+            select(MainTable.item_id)
+            .where(MainTable.item_id == item_id)
+            .group_by(MainTable.item_id)
+            .having(func.count(MainTable.id) == 1)
+        )
 
-        if dict_entry:
-            item_name = dict_entry.item
-            session.delete(last_note)
-            session.delete(dict_entry)
-            print(f"Удалено из БД и словаря: ...{item_name}")
+        is_single_use = session.execute(having_stmt).scalar_one_or_none()
+
+        # получаем имя
+        item_name = session.get(DictTable, item_id)
+        item_name = item_name.item if item_name else "Неизвестно"
+
+        # 3️⃣ удаляем основную запись
+        session.delete(main_obj)
+
+        # 4️⃣ если item использовался один раз — удаляем и его
+        if is_single_use:
+            dict_obj = session.get(DictTable, item_id)
+            if dict_obj:
+                session.delete(dict_obj)
+                print(f"Удалено из main и items: ...{item_name}")
         else:
-            session.delete(last_note)
-            print("Запись в MainTable удалена, связанный item не найден")
+            print(f"Удалено только из main: ...{item_name}")
 
         session.commit()
         return item_name

@@ -55,7 +55,7 @@ async def process_help_command(message: Message):
 )
 async def del_note(message: Message):
     last = del_last_note()
-    text = "удалена запись: "
+    text = "🗑 удалена запись: "
     await message.answer(text=text + last)
 
 
@@ -110,8 +110,9 @@ async def get_month(message: Message):
 @router.callback_query(F.data.in_(LEXICON_MONTH.keys()))
 async def process_chose_month(callback: CallbackQuery):
     month = callback.data
-    res = get_stat_month(month)
-    total = spend_month(month)
+    user_id = callback.from_user.id
+    res = get_stat_month(user_id, month)
+    total = spend_month(user_id, month)
     name_month = LEXICON_MONTH[callback.data]
     await callback.message.edit_text(
         text=f"<u>Траты за <b>{name_month}</b>:</u> \n{res}\n<b> ИТОГО: {total}</b> gel"
@@ -135,8 +136,9 @@ async def show_another(callback: CallbackQuery):
 @router.callback_query(F.data == "_another")
 async def show_another(callback: CallbackQuery):
     month = callback.message.text
+    user_id = callback.from_user.id
     start_date, end_date = get_month_range(month)
-    result = get_another(start_date, end_date)
+    result = get_another(user_id, start_date, end_date)
     await callback.message.answer(
         text=f"<u>Другое за <b>{LEXICON_MONTH[month]}</b>:</u> \n{result}\n"
     )
