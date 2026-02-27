@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 
-def make_name_price(note: str) -> tuple[str, float]:
+def make_item_price(note: str) -> tuple[str, float]:
     """Парсит строку на товар и цену. Возвращает (название, цена)."""
     # Паттерны для "товар цена" и "цена товар"
     pattern_1 = r"(^.+)\s(\d+[\.|,]?\d*)$"
@@ -44,8 +44,8 @@ def make_name_price(note: str) -> tuple[str, float]:
 #     return session.execute(query).scalar_one_or_none()
 
 
-def get_subname(item: str) -> str | None:
-    """Возвращает текстовое название категории (cat) для товара (item)."""
+def get_category(item: str) -> str | None:
+    """Возвращает текстовое название(cat) из таблицы категории для товара (item)."""
     clean_item = item.strip().lower()
     with Session(engine) as session:
         query = (
@@ -57,22 +57,20 @@ def get_subname(item: str) -> str | None:
         return session.execute(query).scalar_one_or_none()
 
 
-def process_message_to_expenses(row_messages: str, user_id: int) -> str:
-    lines = row_messages.strip().split("\n")
-    results = []
+def process_msg_to_expenses(raw_messages: str, user_id: int) -> str | None:
+    """
+    Создает запись о трате ТОЛЬКО один раз:
+    - если категория известна -> сразу пишем в БД;
+    - если категория неизвестна -> кладём в очередь, ждём выбора, в БД пока не пишем.
+    """
+    results: list[str] = []
 
-    for line in lines:
-        if not line.strip():
-            continue
-
-        # Парсим название и цену
-        item_name, price = make_name_price(line)
-
-        # Проверяем, есть ли уже этот товар в справочнике БД
-        category_name = get_subname(item_name)
+    for line in filter(None, map(str.strip, raw_messages.splitlines())):
+        item_name, price = make_item_price(line)
+        category_name = get_category(item_name)
 
         if category_name:
-            # Сценарий А: Категория известна
+            # Уже знаем категорию: сразу сохраняем
             expense = Expense(
                 raw=line,
                 user_id=user_id,
@@ -84,21 +82,8 @@ def process_message_to_expenses(row_messages: str, user_id: int) -> str:
             add_new_data(expense)
             results.append(category_name)
         else:
-            # Сценарий Б: Новый товар, категории нет
-            expense = Expense(
-                raw=line,
-                user_id=user_id,
-                item=item_name,
-                price=price,
-                category=None,
-                flag=False,
-            )
-            # Сохраняем в таблицу Main (с NULL категорией в справочнике)
-            add_new_data(expense)
-
-            # Добавляем в ПЕРСОНАЛЬНУЮ очередь пользователя
-            # Передаем кортеж, чтобы функция form_expense_instance могла его распарсить
-            no_subs.queue(user_id, (expense.item, expense.price, expense.raw))
+            # Категория пока неизвестна: в БД НЕ пишем, только ставим в очередь
+            no_subs.queue(user_id, (item_name, price, line))
 
     return ", ".join(results) or None
 

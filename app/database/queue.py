@@ -1,29 +1,37 @@
+from collections import defaultdict, deque
+
+
 class UserQueue:
     def __init__(self):
-        # Храним данные в формате {user_id: [список_объектов]}
-        self.users = {}
+        # {user_id: deque([...])}
+        self.users = defaultdict(deque)
 
     def is_empty(self, user_id):
-        return len(self.users.get(user_id, [])) == 0
+        return not self.users[user_id]
 
     def queue(self, user_id, item):
-        if user_id not in self.users:
-            self.users[user_id] = []
         self.users[user_id].append(item)
 
     def dequeue(self, user_id):
-        if not self.is_empty(user_id):
-            return self.users[user_id].pop(0)
+        if self.users[user_id]:
+            return self.users[user_id].popleft()
         return None
 
     def peek(self, user_id):
-        if not self.is_empty(user_id):
+        if self.users[user_id]:
             return self.users[user_id][0]
         return None
 
     def clean(self, user_id):
-        self.users[user_id] = []
+        self.users[user_id].clear()
 
 
 # Создаем один глобальный экземпляр
 no_subs = UserQueue()
+# user_1 = 12345
+# user_2 = 11111
+# no_subs.queue(user_1, "кофе 10")
+# print(no_subs.peek(user_1))
+#
+# no_subs.queue(user_2, "кофе 20")
+# print(no_subs.peek(user_2))

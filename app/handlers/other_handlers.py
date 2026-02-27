@@ -4,7 +4,7 @@ from app.services import (
     add_new_data,
     form_expense_instance,
     books,
-    process_message_to_expenses,
+    process_msg_to_expenses,
 )
 from app.keyboards import add_subname_kb
 from app.lexicon import *
@@ -24,11 +24,11 @@ router.message.filter(IsAdmin(_ADMIN_IDS))
 async def ask_next_item(message: Message, user_id: int, is_edit: bool = False):
     item = no_subs.peek(user_id)
 
+    # 🔹 Если очередь пуста → ВСЕГДА новое сообщение
     if not item:
-        text = "✅ Все траты обработаны!"
-        method = message.edit_text if is_edit else message.answer
-        return await method(text)
+        return await message.answer("✅ Все траты обработаны!")
 
+    # 🔹 Если есть товар — можно редактировать
     text = f"Добавить категорию товару: <b>{item[2]}</b>?"
     reply_markup = add_subname_kb(**LEXICON_SUBNAMES)
 
@@ -42,14 +42,15 @@ async def ask_next_item(message: Message, user_id: int, is_edit: bool = False):
 @router.message(F.text)
 async def add_note(message: Message):
     user_id = message.from_user.id
-    # get_categories внутри делает add_new_data и наполняет no_subs(user_id)
-    all_categories = process_message_to_expenses(message.text, user_id)
-    print(all_categories)
+
+    all_categories = process_msg_to_expenses(message.text, user_id)
 
     if all_categories:
         await message.answer(f"Добавлено в: <b>{all_categories}</b>")
 
-    await ask_next_item(message, user_id)
+    # 👇 ВАЖНО: проверяем, есть ли вообще товары без категории
+    if not no_subs.is_empty(user_id):
+        await ask_next_item(message, user_id)
 
 
 # --- CALLBACKS: МЕНЮ И ОТМЕНА ---
@@ -58,10 +59,15 @@ async def add_note(message: Message):
 @router.callback_query(F.data == "cancel")
 async def cancel_expense(callback: CallbackQuery):
     user_id = callback.from_user.id
+
     skipped = no_subs.dequeue(user_id)
-    text = f"Отменено для: <b>{skipped[2] if skipped else '...'}</b>"
-    await callback.answer(text)
-    await ask_next_item(callback.message, user_id, is_edit=True)
+
+    text = f"❌ Отменено для: <b>{skipped[2] if skipped else '...'}</b>"
+    await callback.message.answer(text)
+    await callback.answer()
+
+    if not no_subs.is_empty(user_id):
+        await ask_next_item(callback.message, user_id, is_edit=True)
 
 
 @router.callback_query(F.data == "correct")
@@ -91,7 +97,7 @@ async def process_group_press(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.in_(LEXICON_KEYS))
-async def process_category_selection(callback: CallbackQuery):
+async def category_select(callback: CallbackQuery):
     user_id = callback.from_user.id
 
     # form_expense_instance должен использовать peek и возвращать объект Expense
