@@ -41,8 +41,7 @@ def get_user_id(event: Message | CallbackQuery) -> int:
     return event.from_user.id
 
 
-async def send_page(message: Message, state: FSMContext):
-    user_id = get_user_id(message)
+async def send_page(user_id: int, message: Message, state: FSMContext):
     data = await state.get_data()
     page = data.get("page", 0)
     user_pages = books.get(user_id, [])
@@ -122,7 +121,7 @@ async def send_book(message: Message, state: FSMContext):
 
     await state.set_state(BookState.reading)
     await state.update_data(page=0, pages=books[user_id])  # <-- добавили pages
-    await send_page(message, state)
+    await send_page(user_id, message, state)
 
 
 @router.message(Command("tanya"))
@@ -136,7 +135,7 @@ async def send_book(message: Message, state: FSMContext):
 
     await state.set_state(BookState.reading)
     await state.update_data(page=0, pages=books[user_id])  # <-- добавили pages
-    await send_page(message, state)
+    await send_page(user_id, message, state)
 
 
 @router.message(Command("del_last_note"))

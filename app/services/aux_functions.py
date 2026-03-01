@@ -107,7 +107,6 @@ books: dict[int, dict[int, str]] = defaultdict(dict)
 
 
 def _get_part_text(expenses_out: list[tuple], start: int, page_size: int) -> str:
-    print(expenses_out)
     part = expenses_out[start : start + page_size]
 
     lines = []
@@ -142,3 +141,13 @@ def prepare_book(expenses_out: list[tuple], user_id: int, page_size: int = 20):
         books[user_id][page] = _get_part_text(expenses_out, start, page_size)
         start += page_size
         page += 1
+
+
+"""
+if __name__ == "__main__":
+    expenses_out = ["анализы...... 37.5", "макдак уле... 35", "итого:....... 72.5"]
+    user_id = 1194999116
+    page_size = 20
+    prepare_book(expenses_out, user_id, page_size)
+    print(books)
+"""
