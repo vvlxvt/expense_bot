@@ -175,7 +175,6 @@ def spend_today(user_id) -> float:
             MainTable.user_id == user_id, MainTable.created >= start_date
         )
         result = session.execute(stmt).scalar()
-        print(result)
     return result
 
 
@@ -229,7 +228,7 @@ def get_my_expenses(user_id: int):
         result = session.execute(stmt).all()
         total = round(sum(r[1] for r in result), 2)
         result.append(("итого:", total))
-    return result
+    return format_output(result)
 
 
 def get_my_expenses_group(user_id):
@@ -263,7 +262,7 @@ def get_my_expenses_group(user_id):
             total,
         )
     )
-    return "\n".join(format_output(result))
+    return format_output(result)
 
 
 def get_another(user_id, start_date, end_date):
@@ -301,20 +300,33 @@ def get_another(user_id, start_date, end_date):
 from sqlalchemy import select, func
 
 
-def del_last_note():
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
+
+
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
+
+
+def del_last_note(user_id: int):
     with Session(engine) as session:
-        # 1️⃣ получаем последнюю запись
-        last_stmt = select(MainTable).order_by(MainTable.id.desc()).limit(1)
+        # 1️⃣ получаем последнюю запись ТОЛЬКО этого пользователя
+        last_stmt = (
+            select(MainTable)
+            .where(MainTable.user_id == user_id)
+            .order_by(MainTable.id.desc())
+            .limit(1)
+        )
 
         main_obj = session.execute(last_stmt).scalar_one_or_none()
 
         if not main_obj:
-            print("База данных пуста")
+            print("У пользователя нет записей")
             return None
 
         item_id = main_obj.item_id
 
-        # 2️⃣ проверяем через HAVING, единственное ли использование
+        # 2️⃣ проверяем, используется ли item только этим пользователем один раз
         having_stmt = (
             select(MainTable.item_id)
             .where(MainTable.item_id == item_id)
@@ -324,16 +336,15 @@ def del_last_note():
 
         is_single_use = session.execute(having_stmt).scalar_one_or_none()
 
-        # получаем имя
-        item_name = session.get(DictTable, item_id)
-        item_name = item_name.item if item_name else "Неизвестно"
+        # получаем имя товара
+        dict_obj = session.get(DictTable, item_id)
+        item_name = dict_obj.item if dict_obj else "Неизвестно"
 
-        # 3️⃣ удаляем основную запись
+        # 3️⃣ удаляем запись
         session.delete(main_obj)
 
-        # 4️⃣ если item использовался один раз — удаляем и его
+        # 4️⃣ если товар использовался только один раз — удаляем и его
         if is_single_use:
-            dict_obj = session.get(DictTable, item_id)
             if dict_obj:
                 session.delete(dict_obj)
                 print(f"Удалено из main и items: ...{item_name}")

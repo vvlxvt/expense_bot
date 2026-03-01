@@ -1,44 +1,43 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from app.lexicon.lexicon import LEXICON_book
+from app.config import BookState
 from app.services import books
 
 
-def create_pagination_keyboard(page=1) -> InlineKeyboardMarkup:
-    if books.keys():
-        max_key = max(books, key=lambda k: len(books[k]))
-        book = books[max_key]
-        middle_text = f"{page}/{len(book)} CLOSE"
-        kb_builder: InlineKeyboardBuilder = InlineKeyboardBuilder()
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-        buttons: list[InlineKeyboardButton] = []
 
-        if page > 1:
-            buttons.append(
-                InlineKeyboardButton(
-                    text=LEXICON_book.get("backward", "<<"),
-                    callback_data="backward",
-                )
-            )
+def create_pagination_keyboard(
+    user_id: int, page: int, state: str
+) -> InlineKeyboardMarkup:
+    """
+    Формирует клавиатуру для пагинации.
 
+    Для BookState.reading: кнопки prev/next/close и "Сгруппировать?"
+    Для BookState.grouped: только кнопка close
+    """
+    kb = InlineKeyboardBuilder()
+
+    if state == BookState.reading:
+        user_pages = books.get(user_id, [])
+        total = len(user_pages)
+
+        buttons = []
+        if page > 0:
+            buttons.append(InlineKeyboardButton(text="◀", callback_data="prev"))
         buttons.append(
-            InlineKeyboardButton(
-                text=middle_text,
-                callback_data="close",
-            )
+            InlineKeyboardButton(text=f"{page + 1}/{total}", callback_data="close")
         )
+        if page < total - 1:
+            buttons.append(InlineKeyboardButton(text="▶", callback_data="next"))
 
-        if page < len(book):
-            buttons.append(
-                InlineKeyboardButton(
-                    text=LEXICON_book.get("forward", ">>"),
-                    callback_data="forward",
-                )
-            )
+        if buttons:
+            kb.row(*buttons)
 
-        kb_builder.row(*buttons)
+        # Кнопка для grouped
+        kb.row(InlineKeyboardButton(text="Сгруппировать?", callback_data="group"))
 
-    # Добавляем дополнительную кнопку в новый ряд
-    extra_button = InlineKeyboardButton(text="Сгруппировать?", callback_data="group")
-    kb_builder.row(extra_button)
-    return kb_builder.as_markup()
+    elif state == BookState.grouped:
+        # Для grouped оставляем только закрытие
+        kb.row(InlineKeyboardButton(text="Закрыть", callback_data="close"))
+
+    return kb.as_markup()

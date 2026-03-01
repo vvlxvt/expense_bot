@@ -1,9 +1,13 @@
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
-from app.keyboards.pagination import create_pagination_keyboard
+from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
+
+from app.filters import IsAdmin
 from app.lexicon import LEXICON, LEXICON_MONTH, LEXICON_ANOTHER
 from app.keyboards import add_subname_kb, another_kb, one_button_kb
+from app.keyboards.pagination import create_pagination_keyboard
 from app.database import (
     get_stat_week,
     get_my_expenses,
@@ -15,137 +19,222 @@ from app.database import (
     spend_month,
     spend_today,
 )
-from app.filters import IsAdmin
 from app.services import prepare_book, get_month_range, books
-from app.config.config import GlobalVars
+from app.config import BookState
 from app import config
 
-# Build charts URL from environment
+# -----------------------------
+# CONFIG
+# -----------------------------
 _conf = config.load_config(None)
 _BASE_WEBHOOK_URL = _conf.base_webhook_url.rstrip("/") if _conf.base_webhook_url else ""
 _CHARTS_URL = f"{_BASE_WEBHOOK_URL}/stats" if _BASE_WEBHOOK_URL else "/stats"
 
-
-router: Router = Router()
+router = Router()
 router.message.filter(IsAdmin(_conf.tg_bot.admin_ids))
 
 
+# -----------------------------
+# HELPERS
+# -----------------------------
+def get_user_id(event: Message | CallbackQuery) -> int:
+    return event.from_user.id
+
+
+async def send_page(message: Message, state: FSMContext):
+    user_id = get_user_id(message)
+    data = await state.get_data()
+    page = data.get("page", 0)
+    user_pages = books.get(user_id, [])
+
+    if not user_pages:
+        return await message.answer("Нет данных")
+
+    page = max(0, min(page, len(user_pages) - 1))
+    await state.update_data(page=page)
+
+    text = f"<b>Страница {page + 1}/{len(user_pages)}</b>\n\n{user_pages[page]}"
+
+    # Получаем текущее состояние FSM
+    current_state = await state.get_state()
+
+    await message.answer(
+        text,
+        reply_markup=create_pagination_keyboard(user_id, page, state=current_state),
+        parse_mode="HTML",
+    )
+
+
+# -----------------------------
+# BASIC COMMANDS
+# -----------------------------
 @router.message(CommandStart())
-async def process_start_command(message: Message):
-    await message.answer(LEXICON[message.text])
+async def start(message: Message):
+    await message.answer(LEXICON["/start"])
 
 
-@router.message(Command(commands="help"))
-async def process_help_command(message: Message):
-    await message.answer(LEXICON[message.text])
+@router.message(Command("help"))
+async def help_command(message: Message):
+    await message.answer(LEXICON["/help"])
 
 
-@router.message(Command(commands="tanya"))
-async def process_help_command(message: Message):
-    user_id = 1194999116
-    result = get_my_expenses(user_id)
-    prepare_book(result, user_id)
-    page = max(books[user_id])
-    text = "Последние траты Тани в этом месяце: "
-    await message.answer(text=f" <b>{text}</b>\n {books[user_id][page]} ")
-
-
-@router.message(
-    Command(commands="del_last_note"),
-)
-async def del_note(message: Message):
-    last = del_last_note()
-    text = "🗑 удалена запись: "
-    await message.answer(text=text + last)
-
-
-@router.message(Command(commands="today"))
-async def get_today(message: Message):
-    message_date = message.date
-    user_id = message.from_user.id
-    total_spending = spend_today(user_id)
-    date_format = "%d-%m-%Y"  # Формат часов:минут:секунд
-    formatted_time = message_date.strftime(date_format)
-    await message.answer(
-        text=f"сегодня <i>{formatted_time}</i> я потратил/а <b>{total_spending}</b> GEL "
-    )
-
-
-@router.message(Command(commands="week"))
-async def get_week(message: Message):
-    user_id = message.from_user.id
-    res = get_stat_week(user_id)
-    total = round(spend_week(user_id), 2)
-    await message.answer(
-        text=f"  <b>{res}</b>\n С начала недели мною потрачено: {total} GEL "
-    )
-
-
-@router.message(Command(commands="month"))
-async def get_month(message: Message):
-    text = "За какой месяц показать статистику?"
-    await message.answer(text=text, reply_markup=add_subname_kb(**LEXICON_MONTH))
-
-
-@router.message(Command(commands="charts"))
-async def charts_command(message: Message):
+@router.message(Command("charts"))
+async def charts(message: Message):
     keyboard = one_button_kb("Открыть график", _CHARTS_URL)
     await message.answer("Перейдите по ссылке:", reply_markup=keyboard)
 
 
-@router.message(Command(commands="my_month"))
-async def get_month(message: Message):
-    user_id = message.from_user.id
+# -----------------------------
+# EXPENSE COMMANDS
+# -----------------------------
+@router.message(Command("today"))
+async def today(message: Message):
+    user_id = get_user_id(message)
+    total = spend_today(user_id)
+    formatted = message.date.strftime("%d-%m-%Y")
+    await message.answer(f"Сегодня <i>{formatted}</i> я потратил/а <b>{total}</b> GEL")
+
+
+@router.message(Command("week"))
+async def week(message: Message):
+    user_id = get_user_id(message)
+    res = get_stat_week(user_id)
+    total = round(spend_week(user_id), 2)
+    await message.answer(f"<b>{res}</b>\nС начала недели потрачено: {total} GEL")
+
+
+@router.message(Command("month"))
+async def choose_month(message: Message):
+    await message.answer(
+        "За какой месяц показать статистику?",
+        reply_markup=add_subname_kb(**LEXICON_MONTH),
+    )
+
+
+@router.message(Command("my_month"))
+async def send_book(message: Message, state: FSMContext):
+    user_id = get_user_id(message)
     result = get_my_expenses(user_id)
     prepare_book(result, user_id)
-    gv = GlobalVars(user_id)
-    gv.page = 1
-    text = "Все мои траты с начала месяца: "
-    await message.answer(
-        text=f" <b>{text}</b>\n {books[user_id][gv.page]} ",
-        reply_markup=create_pagination_keyboard(),
-    )
+
+    if not books.get(user_id):
+        return await message.answer("Нет данных для отображения")
+
+    await state.set_state(BookState.reading)
+    await state.update_data(page=0, pages=books[user_id])  # <-- добавили pages
+    await send_page(message, state)
 
 
+@router.message(Command("del_last_note"))
+async def delete_last(message: Message):
+    user_id = get_user_id(message)
+    last = del_last_note(user_id)
+    await message.answer(f"🗑 Удалена запись: {last}")
+
+
+# -----------------------------
+# UNIVERSAL BOOK HANDLER (READING / GROUPED)
+# -----------------------------
+@router.callback_query(F.data.in_({"prev", "next", "close", "group"}))
+async def book_handler(callback: CallbackQuery, state: FSMContext):
+    user_id = get_user_id(callback)
+    current_state = await state.get_state()
+    data = await state.get_data()
+
+    # -------------------------------
+    # Кнопка "close" — завершение FSM
+    # -------------------------------
+    if callback.data == "close":
+        await state.clear()
+        await callback.message.delete()
+        return await callback.answer()
+
+    # -------------------------------
+    # Кнопка "group" — перейти на grouped
+    # -------------------------------
+    if callback.data == "group":
+        result = get_my_expenses_group(user_id)
+        prepared_result = "\n".join(result)
+        if not result:
+            return await callback.answer("Нет данных для группировки", show_alert=True)
+
+        await state.set_state(BookState.grouped)
+        await callback.message.edit_text(
+            f"<u>Мои траты за текущий месяц:</u>\n{prepared_result}\n",
+            reply_markup=create_pagination_keyboard(
+                user_id, 0, state=BookState.grouped
+            ),
+        )
+        return await callback.answer()
+
+    # -------------------------------
+    # Пагинация для reading
+    # -------------------------------
+    if current_state != BookState.reading:
+        return await callback.answer()
+
+    pages = data.get("pages", [])
+    page = data.get("page", 0)
+
+    if not pages:
+        await callback.answer("Нет данных для отображения", show_alert=True)
+        return await state.clear()
+
+    if callback.data == "next" and page < len(pages) - 1:
+        page += 1
+    elif callback.data == "prev" and page > 0:
+        page -= 1
+
+    await state.update_data(page=page)
+
+    new_text = f"<b>Страница {page + 1}/{len(pages)}</b>\n\n{pages[page]}"
+    new_markup = create_pagination_keyboard(user_id, page, state=BookState.reading)
+
+    try:
+        await callback.message.edit_text(
+            new_text, reply_markup=new_markup, parse_mode="HTML"
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
+
+    await callback.answer()
+
+
+# -----------------------------
+# MONTH STATISTICS
+# -----------------------------
 @router.callback_query(F.data.in_(LEXICON_MONTH.keys()))
-async def process_chose_month(callback: CallbackQuery):
+async def choose_month_callback(callback: CallbackQuery):
+    user_id = get_user_id(callback)
     month = callback.data
-    user_id = callback.from_user.id
+
     res = get_stat_month(user_id, month)
     total = spend_month(user_id, month)
-    name_month = LEXICON_MONTH[callback.data]
+
     await callback.message.edit_text(
-        text=f"<u>Траты за <b>{name_month}</b>:</u> \n{res}\n<b> ИТОГО: {total}</b> gel"
-    )
-    await callback.message.answer(text=f"Показать подробно категорию ДРУГОЕ?")
-    await callback.message.answer(
-        text=month, reply_markup=another_kb(**LEXICON_ANOTHER)
+        f"<u>Траты за <b>{LEXICON_MONTH[month]}</b>:</u>\n"
+        f"{res}\n<b>ИТОГО: {total}</b> GEL"
     )
 
-
-@router.callback_query(F.data == "group")
-async def show_another(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    result = get_my_expenses_group(user_id)
-    await callback.message.answer(
-        text=f"<u>Мои траты за текущий месяц:</u> \n{result}\n"
-    )
-    # await callback.message.delete_reply_markup()
+    await callback.message.answer("Показать подробно категорию ДРУГОЕ?")
+    await callback.message.answer(month, reply_markup=another_kb(**LEXICON_ANOTHER))
 
 
 @router.callback_query(F.data == "_another")
 async def show_another(callback: CallbackQuery):
+    user_id = get_user_id(callback)
     month = callback.message.text
-    user_id = callback.from_user.id
     start_date, end_date = get_month_range(month)
     result = get_another(user_id, start_date, end_date)
+
     await callback.message.answer(
-        text=f"<u>Другое за <b>{LEXICON_MONTH[month]}</b>:</u> \n{result}\n"
+        f"<u>Другое за <b>{LEXICON_MONTH[month]}</b>:</u>\n{result}"
     )
     await callback.message.delete_reply_markup()
 
 
 @router.callback_query(F.data == "_cancel")
-async def cancel_add_expense(callback: CallbackQuery):
-    await callback.message.edit_text(text="отмена")
+async def cancel(callback: CallbackQuery):
+    await callback.message.edit_text("Отмена")
     await callback.message.delete_reply_markup()

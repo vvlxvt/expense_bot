@@ -1,7 +1,5 @@
 import asyncio
 
-books = {}
-
 
 async def daily_timer():
     while True:
@@ -102,35 +100,45 @@ def get_week_range() -> tuple:
     return start_of_week, current_datetime
 
 
-def _get_part_text(expenses_out: str, start: int, page_size: int) -> tuple[str, int]:
-    end = start + page_size
-    nums = list(range(start + 1, end + 1))  # постраничная нумерация
-    exps = [x + " " + str(y) for x, y in expenses_out[start:end]]
-    nums_exps = list(zip(nums, exps))
-    result = [str(x) + ".  " + y for x, y in nums_exps]
-    print(result)
-    return "\n".join(result)
+from collections import defaultdict
+
+# Хранилище страниц по пользователю
+books: dict[int, dict[int, str]] = defaultdict(dict)
 
 
-def prepare_book(text: list, user_id: int) -> None:
-    if id not in books:
-        books[user_id] = {}
-    finish = len(text) - 1
-    start, i = 0, 1
-    page_size = 20
-    while start < finish:
-        strokes = _get_part_text(text, start, page_size)
-        books[user_id].update({i: strokes})
+def _get_part_text(expenses_out: list[tuple], start: int, page_size: int) -> str:
+    print(expenses_out)
+    part = expenses_out[start : start + page_size]
+
+    lines = []
+    for idx, item in enumerate(part, start=start + 1):
+        # проверяем, что элемент кортеж из двух значений
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            name, amount = item
+            lines.append(f"{idx}. {name} — {amount}")
+        else:
+            # если вдруг элемент не кортеж, просто выводим как есть
+            lines.append(f"{idx}. {item}")
+    return "\n".join(lines)
+
+
+def prepare_book(expenses_out: list[tuple], user_id: int, page_size: int = 20):
+    """
+    Создаёт словарь страниц для пользователя
+    books[user_id] = {0: 'страница 1', 1: 'страница 2', ...}
+    """
+    global books
+    from collections import defaultdict
+
+    if "books" not in globals():
+        books = defaultdict(dict)
+
+    books[user_id].clear()
+
+    start = 0
+    page = 0
+    print(expenses_out)
+    while start < len(expenses_out):
+        books[user_id][page] = _get_part_text(expenses_out, start, page_size)
         start += page_size
-        i += 1
-
-
-if __name__ == "__main__":
-    cur_month = datetime.now().strftime("%b")
-    tests = ["Jan", "Mar", "Jun", "Oct", "Dec",cur_month]
-
-    for m in tests:
-        print(f"▶️ Testing {m}:")
-        start, end = get_month_range(m)
-        print(f"Start: {start.date()}, End: {end.date()}")
-        print("-" * 40)
+        page += 1
