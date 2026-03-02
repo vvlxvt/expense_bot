@@ -98,7 +98,7 @@ async def today(message: Message):
 async def week(message: Message):
     user_id = get_user_id(message)
     res = get_stat_week(user_id)
-    total = round(spend_week(user_id), 2)
+    total = round(spend_week(user_id) or 0, 2)
     await message.answer(f"<b>{res}</b>\nС начала недели потрачено: {total} GEL")
 
 
