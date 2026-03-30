@@ -1,7 +1,8 @@
 from .expense import Expense
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from .conn_db import engine, DictTable, MainTable, CatTable
+from .conn_db import DictTable, MainTable, CatTable
+from app.config import engine
 
 
 def get_or_create_item_id(

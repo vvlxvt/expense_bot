@@ -4,14 +4,15 @@ from app.database import (
     UserQueue,
     Expense,
     add_new_data,
-    engine,
     DictTable,
     CatTable,
 )
+from app.database.functions import engine
 from app.lexicon.lexicon import LEXICON_KEYS
 import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from app.config import engine
 
 
 def make_item_price(note: str) -> tuple[str, float]:

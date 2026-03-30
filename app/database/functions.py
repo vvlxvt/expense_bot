@@ -1,16 +1,13 @@
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
-from .conn_db import session, DictTable, MainTable, CatTable, engine
+from app.config import engine
+from .conn_db import session, DictTable, MainTable, CatTable
 from datetime import datetime, timedelta, date, time
 from app.services.aux_functions import (
     get_month_range,
     get_week_range,
     get_previous_n_month_ranges,
 )
-
-
-from sqlalchemy import select, func
-from datetime import datetime
 
 
 def get_cumulative_data(category: str, month: str):
@@ -297,20 +294,9 @@ def get_another(user_id, start_date, end_date):
     return "\n".join(format_output(result))
 
 
-from sqlalchemy import select, func
-
-
-from sqlalchemy import select, func
-from sqlalchemy.orm import Session
-
-
-from sqlalchemy import select, func
-from sqlalchemy.orm import Session
-
-
 def del_last_note(user_id: int):
     with Session(engine) as session:
-        # 1️⃣ получаем последнюю запись ТОЛЬКО этого пользователя
+        # получаем последнюю запись ТОЛЬКО этого пользователя
         last_stmt = (
             select(MainTable)
             .where(MainTable.user_id == user_id)
@@ -326,7 +312,7 @@ def del_last_note(user_id: int):
 
         item_id = main_obj.item_id
 
-        # 2️⃣ проверяем, используется ли item только этим пользователем один раз
+        # проверяем, используется ли item только этим пользователем один раз
         having_stmt = (
             select(MainTable.item_id)
             .where(MainTable.item_id == item_id)
@@ -340,10 +326,10 @@ def del_last_note(user_id: int):
         dict_obj = session.get(DictTable, item_id)
         item_name = dict_obj.item if dict_obj else "Неизвестно"
 
-        # 3️⃣ удаляем запись
+        # удаляем запись
         session.delete(main_obj)
 
-        # 4️⃣ если товар использовался только один раз — удаляем и его
+        # если товар использовался только один раз — удаляем и его
         if is_single_use:
             if dict_obj:
                 session.delete(dict_obj)

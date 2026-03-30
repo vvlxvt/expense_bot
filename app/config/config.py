@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from environs import Env
+from sqlalchemy import create_engine, Engine
 
 
 @dataclass
@@ -14,6 +15,10 @@ class Config:
     app_env: str
     base_webhook_url: str
     db_path: str
+    engine: Engine = field(init=False)  # не передаётся в конструктор
+
+    def __post_init__(self):
+        self.engine = create_engine(f"sqlite:///{self.db_path}", echo=False)
 
 
 def load_config(path: str | None) -> Config:
@@ -29,6 +34,9 @@ def load_config(path: str | None) -> Config:
         db_path=env.str("DB_PATH", "data/real.db"),
     )
 
+
+conf = load_config(None)
+engine = conf.engine
 
 from aiogram.fsm.state import StatesGroup, State
 
