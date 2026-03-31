@@ -6,6 +6,7 @@ from app.database import (
     add_new_data,
     DictTable,
     CatTable,
+    spend,
 )
 from app.database.functions import engine
 from app.lexicon.lexicon import LEXICON_KEYS
@@ -81,6 +82,7 @@ def process_msg_to_expenses(raw_messages: str, user_id: int) -> str | None:
                 flag=False,
             )
             add_new_data(expense)
+            spend(user_id, expense.price)
             results.append(category_name)
         else:
             # Категория пока неизвестна: в БД НЕ пишем, только ставим в очередь

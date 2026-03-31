@@ -35,6 +35,7 @@ LEXICON_COMMANDS: dict[str, str] = {
     "/month": "траты за месяц",
     "/my_month": "мои траты с начала месяца",
     "/charts": "графики",
+    "/balance": "мой баланс",
 }
 
 LEXICON_SUBNAMES: dict[str, str] = {

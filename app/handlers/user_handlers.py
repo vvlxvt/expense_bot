@@ -18,6 +18,7 @@ from app.database import (
     spend_week,
     spend_month,
     spend_today,
+    get_balance,
 )
 from app.services import prepare_book, get_month_range, books
 from app.config import BookState
@@ -95,6 +96,13 @@ async def add_deposit(message: Message):
     top_up(user_id, amount)
 
     await message.answer(f"Баланс пополнен на {amount}")
+
+
+@router.message(Command("balance"))
+async def balance(message: Message):
+    user_id = get_user_id(message)
+    balance = get_balance(user_id)
+    await message.answer(f"Ваш баланс {balance} лари")
 
 
 # -----------------------------

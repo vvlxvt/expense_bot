@@ -83,19 +83,20 @@ def spend(user_id: int, amount: float):
             stmt = select(UserTable).where(UserTable.telegram_id == user_id)
             user = session.scalar(stmt)
 
-            if not user:
-                return "Пользователь не найден"
-
-            if user.deposit < amount:
-                return "Недостаточно средств"
-
             user.deposit -= amount
             session.commit()
             return user.deposit
 
         except Exception as e:
             session.rollback()
-            return f"Ошибка: {e}"
+            return
+
+
+def get_balance(user_id: int):
+    with Session(engine) as session:
+        return session.scalar(
+            select(UserTable.deposit).where(UserTable.telegram_id == user_id)
+        )
 
 
 def add_new_data(instance: Expense):
