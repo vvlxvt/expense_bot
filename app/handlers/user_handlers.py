@@ -22,6 +22,7 @@ from app.database import (
 from app.services import prepare_book, get_month_range, books
 from app.config import BookState
 from app import config
+from app.database import top_up
 
 # -----------------------------
 # CONFIG
@@ -75,6 +76,30 @@ async def start(message: Message):
 @router.message(Command("help"))
 async def help_command(message: Message):
     await message.answer(LEXICON["/help"])
+
+
+# -----------------------------
+# BALANCE COMMANDS
+# -----------------------------
+
+
+@router.message(Command("deposit"))
+async def add_deposit(message: Message):
+    try:
+        amount = float(message.text.split()[1])
+    except (IndexError, ValueError):
+        await message.answer("Введите сумму: /deposit 100")
+        return
+
+    user_id = get_user_id(message)
+    top_up(user_id, amount)
+
+    await message.answer(f"Баланс пополнен на {amount}")
+
+
+# -----------------------------
+# CHARTS COMMANDS
+# -----------------------------
 
 
 @router.message(Command("charts"))

@@ -1,7 +1,7 @@
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from app.config import engine
-from .conn_db import session, DictTable, MainTable, CatTable
+from .conn_db import session, DictTable, MainTable, CatTable, UserTable
 from datetime import datetime, timedelta, date, time
 from app.services.aux_functions import (
     get_month_range,
@@ -113,6 +113,7 @@ def get_stat_month(user_id, mm: str):
     start_date, end_date = get_month_range(mm)
 
     with Session(engine) as session:
+
         stmt = (
             select(
                 CatTable.cat,
@@ -120,8 +121,9 @@ def get_stat_month(user_id, mm: str):
             )
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
+            .join(UserTable, MainTable.user_id == UserTable.id)
             .where(
-                MainTable.user_id == user_id,
+                UserTable.telegram_id == user_id,
                 MainTable.created >= start_date,
                 MainTable.created <= end_date,
             )
@@ -147,8 +149,9 @@ def get_stat_week(user_id: int) -> list[tuple]:
             )
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
+            .join(UserTable, MainTable.user_id == UserTable.id)
             .where(
-                MainTable.user_id == user_id,
+                UserTable.telegram_id == user_id,
                 MainTable.created >= start_date,
                 MainTable.created <= end_date,
             )
@@ -161,17 +164,20 @@ def get_stat_week(user_id: int) -> list[tuple]:
 
 
 def spend_today(user_id) -> float:
-    """
-    :param user_id: telegram user_id
-    :return: The amount of money spent today
-    """
-    start_date = datetime.combine(datetime.today(), time.min)
+    start_date = datetime.combine(datetime.now().date(), time.min)
 
     with Session(engine) as session:
-        stmt = select(func.sum(MainTable.price)).where(
-            MainTable.user_id == user_id, MainTable.created >= start_date
+        stmt = (
+            select(func.coalesce(func.sum(MainTable.price), 0.0))
+            .join(UserTable, MainTable.user_id == UserTable.id)
+            .where(
+                UserTable.telegram_id == user_id,
+                MainTable.created >= start_date,
+            )
         )
-        result = session.execute(stmt).scalar()
+
+        result = session.scalar(stmt)
+
     return result
 
 
@@ -182,10 +188,14 @@ def spend_week(user_id):
     """
     start_date, end_date = get_week_range()
     with Session(engine) as session:
-        stmt = select(func.sum(MainTable.price)).where(
-            MainTable.user_id == user_id,
-            MainTable.created >= start_date,
-            MainTable.created <= end_date,
+        stmt = (
+            select(func.sum(MainTable.price))
+            .join(UserTable, MainTable.user_id == UserTable.id)
+            .where(
+                UserTable.telegram_id == user_id,
+                MainTable.created >= start_date,
+                MainTable.created <= end_date,
+            )
         )
         result = session.execute(stmt).scalar()
 
@@ -195,10 +205,14 @@ def spend_week(user_id):
 def spend_month(user_id, month):
     start_date, end_date = get_month_range(month)
     with Session(engine) as session:
-        stmt = select(func.round(func.sum(MainTable.price)), 2).where(
-            MainTable.user_id == user_id,
-            MainTable.created >= start_date,
-            MainTable.created <= end_date,
+        stmt = (
+            select(func.round(func.sum(MainTable.price)), 2)
+            .join(UserTable, MainTable.user_id == UserTable.id)
+            .where(
+                UserTable.telegram_id == user_id,
+                MainTable.created >= start_date,
+                MainTable.created <= end_date,
+            )
         )
         result = session.execute(stmt).scalar()
     return result
@@ -216,8 +230,9 @@ def get_my_expenses(user_id: int):
             select(DictTable.item, MainTable.price)
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
+            .join(UserTable, MainTable.user_id == UserTable.id)
             .where(
-                MainTable.user_id == user_id,
+                UserTable.telegram_id == user_id,
                 MainTable.created >= start_date,
                 MainTable.created <= now,
             )
@@ -242,8 +257,9 @@ def get_my_expenses_group(user_id):
             select(CatTable.cat, func.round(func.sum(MainTable.price), 2))
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
+            .join(UserTable, MainTable.user_id == UserTable.id)
             .where(
-                MainTable.user_id == user_id,
+                UserTable.telegram_id == user_id,
                 MainTable.created >= start_date,
                 MainTable.created <= end_date,
             )
@@ -268,8 +284,9 @@ def get_another(user_id, start_date, end_date):
             select(DictTable.item, func.round(MainTable.price, 2).label("price"))
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
+            .join(UserTable, MainTable.user_id == UserTable.id)
             .where(
-                MainTable.user_id == user_id,
+                UserTable.telegram_id == user_id,
                 CatTable.cat == "др. продукты",
                 MainTable.created.between(start_date, end_date),
             )
@@ -279,8 +296,9 @@ def get_another(user_id, start_date, end_date):
             select(func.round(func.sum(MainTable.price), 2))
             .join(DictTable, MainTable.item_id == DictTable.id)
             .join(CatTable, DictTable.cat_id == CatTable.id)
+            .join(UserTable, MainTable.user_id == UserTable.id)
             .where(
-                MainTable.user_id == user_id,
+                UserTable.telegram_id == user_id,
                 CatTable.cat == "др. продукты",
                 MainTable.created.between(start_date, end_date),
             )
@@ -299,7 +317,8 @@ def del_last_note(user_id: int):
         # получаем последнюю запись ТОЛЬКО этого пользователя
         last_stmt = (
             select(MainTable)
-            .where(MainTable.user_id == user_id)
+            .join(UserTable, MainTable.user_id == UserTable.id)
+            .where(UserTable.telegram_id == user_id)
             .order_by(MainTable.id.desc())
             .limit(1)
         )

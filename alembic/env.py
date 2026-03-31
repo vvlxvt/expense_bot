@@ -32,6 +32,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    url = print(alembic_cfg.get_main_option("sqlalchemy.url"))
+    print("----------------", url)
     connectable = engine_from_config(
         alembic_cfg.get_section(alembic_cfg.config_ini_section, {}),  # ✅
         prefix="sqlalchemy.",

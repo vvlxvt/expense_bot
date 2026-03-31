@@ -28,10 +28,3 @@ class UserQueue:
 
 # Создаем один глобальный экземпляр
 no_subs = UserQueue()
-# user_1 = 12345
-# user_2 = 11111
-# no_subs.queue(user_1, "кофе 10")
-# print(no_subs.peek(user_1))
-#
-# no_subs.queue(user_2, "кофе 20")
-# print(no_subs.peek(user_2))

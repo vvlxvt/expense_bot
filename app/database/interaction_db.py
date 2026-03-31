@@ -1,7 +1,7 @@
 from .expense import Expense
 from sqlalchemy.orm import Session
-from sqlalchemy import select
-from .conn_db import DictTable, MainTable, CatTable
+from sqlalchemy import select, update
+from .conn_db import DictTable, MainTable, CatTable, UserTable
 from app.config import engine
 
 
@@ -63,6 +63,41 @@ def get_or_create_item_id(
     return new_dict_item.id
 
 
+# функции пополнения баланса
+
+
+def top_up(user_id, amount):
+    with Session(engine) as session:
+        session.execute(
+            update(UserTable)
+            .where(UserTable.telegram_id == user_id)
+            .values(deposit=UserTable.deposit + amount)
+        )
+        session.commit()
+
+
+# функции списания с баланса
+def spend(user_id: int, amount: float):
+    with Session(engine) as session:
+        try:
+            stmt = select(UserTable).where(UserTable.telegram_id == user_id)
+            user = session.scalar(stmt)
+
+            if not user:
+                return "Пользователь не найден"
+
+            if user.deposit < amount:
+                return "Недостаточно средств"
+
+            user.deposit -= amount
+            session.commit()
+            return user.deposit
+
+        except Exception as e:
+            session.rollback()
+            return f"Ошибка: {e}"
+
+
 def add_new_data(instance: Expense):
     with Session(engine) as session:
         try:
@@ -71,14 +106,17 @@ def add_new_data(instance: Expense):
             item_id = get_or_create_item_id(
                 session, instance.item, instance.category if instance.flag else None
             )
+            user_id = session.scalar(
+                select(UserTable.id).where(UserTable.telegram_id == instance.user_id)
+            )
 
             # 2. Создаем запись в MainTable
             # Мы передаем только те данные, которые относятся к факту траты
             new_record = MainTable(
                 price=instance.price,
                 raw=instance.raw,
-                user_id=instance.user_id,
-                item_id=item_id,  # Тот самый ID, который мы только что получили
+                user_id=user_id,
+                item_id=item_id,  # ID, который мы только что получили
             )
 
             session.add(new_record)

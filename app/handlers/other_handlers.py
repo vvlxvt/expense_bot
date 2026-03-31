@@ -67,7 +67,6 @@ async def proceed_to_next(callback: CallbackQuery):
 @router.message(F.text)
 async def add_note(message: Message):
     user_id = get_user_id(message)
-
     categories = process_msg_to_expenses(message.text, user_id)
 
     if categories:

@@ -44,10 +44,23 @@ class MainTable(Base):
         DateTime, default=datetime.datetime.now, index=True
     )
     raw: Mapped[str] = mapped_column(String, nullable=False)
-    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False, index=True
+    )
+
     item_id: Mapped[int] = mapped_column(
         ForeignKey("items.id", ondelete="CASCADE"),
     )
+
+
+class UserTable(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    telegram_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=True)
+    deposit: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 Base.metadata.create_all(bind=engine)
