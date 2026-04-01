@@ -77,19 +77,22 @@ def top_up(user_id, amount):
 
 
 # функции списания с баланса
-def spend(user_id: int, amount: float):
-    with Session(engine) as session:
-        try:
-            stmt = select(UserTable).where(UserTable.telegram_id == user_id)
-            user = session.scalar(stmt)
+def spend(session: Session, user_id: int, amount: float) -> float:
+    stmt = select(UserTable).where(UserTable.telegram_id == user_id)
+    user = session.scalar(stmt)
 
-            user.deposit -= amount
-            session.commit()
-            return user.deposit
+    if not user:
+        raise ValueError("User not found")
 
-        except Exception as e:
-            session.rollback()
-            return
+    user.deposit -= amount
+    return user.deposit
+
+
+def refund(session: Session, user_id: int, amount: float):
+    user = session.scalar(select(UserTable).where(UserTable.telegram_id == user_id))
+    if not user:
+        raise ValueError("User not found")
+    user.deposit += amount
 
 
 def get_balance(user_id: int):
@@ -102,22 +105,22 @@ def get_balance(user_id: int):
 def add_new_data(instance: Expense):
     with Session(engine) as session:
         try:
-            # 1. Сначала разбираемся со справочником через функцию
-            # Если flag=True, она обновит категорию, если False — просто найдет/создаст заготовку
             item_id = get_or_create_item_id(
                 session, instance.item, instance.category if instance.flag else None
             )
+
             user_id = session.scalar(
                 select(UserTable.id).where(UserTable.telegram_id == instance.user_id)
             )
 
-            # 2. Создаем запись в MainTable
-            # Мы передаем только те данные, которые относятся к факту траты
+            # списание
+            spend(session, instance.user_id, instance.price)
+
             new_record = MainTable(
                 price=instance.price,
                 raw=instance.raw,
                 user_id=user_id,
-                item_id=item_id,  # ID, который мы только что получили
+                item_id=item_id,
             )
 
             session.add(new_record)

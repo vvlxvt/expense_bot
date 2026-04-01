@@ -8,6 +8,7 @@ from app.services.aux_functions import (
     get_week_range,
     get_previous_n_month_ranges,
 )
+from app.database import refund
 
 
 def get_cumulative_data(category: str, month: str):
@@ -314,47 +315,56 @@ def get_another(user_id, start_date, end_date):
 
 def del_last_note(user_id: int):
     with Session(engine) as session:
-        # получаем последнюю запись ТОЛЬКО этого пользователя
-        last_stmt = (
-            select(MainTable)
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(UserTable.telegram_id == user_id)
-            .order_by(MainTable.id.desc())
-            .limit(1)
-        )
+        try:
+            # получаем последнюю запись пользователя
+            last_stmt = (
+                select(MainTable)
+                .join(UserTable, MainTable.user_id == UserTable.id)
+                .where(UserTable.telegram_id == user_id)
+                .order_by(MainTable.id.desc())
+                .limit(1)
+            )
 
-        main_obj = session.execute(last_stmt).scalar_one_or_none()
+            main_obj = session.execute(last_stmt).scalar_one_or_none()
 
-        if not main_obj:
-            print("У пользователя нет записей")
-            return None
+            if not main_obj:
+                print("У пользователя нет записей")
+                return None
 
-        item_id = main_obj.item_id
+            item_id = main_obj.item_id
+            amount = main_obj.price  # 💰 сумма, которую нужно вернуть
 
-        # проверяем, используется ли item только этим пользователем один раз
-        having_stmt = (
-            select(MainTable.item_id)
-            .where(MainTable.item_id == item_id)
-            .group_by(MainTable.item_id)
-            .having(func.count(MainTable.id) == 1)
-        )
+            # получаем пользователя
+            refund(session, user_id, amount)
 
-        is_single_use = session.execute(having_stmt).scalar_one_or_none()
+            # проверка: используется ли item только один раз
+            having_stmt = (
+                select(MainTable.item_id)
+                .where(MainTable.item_id == item_id)
+                .group_by(MainTable.item_id)
+                .having(func.count(MainTable.id) == 1)
+            )
 
-        # получаем имя товара
-        dict_obj = session.get(DictTable, item_id)
-        item_name = dict_obj.item if dict_obj else "Неизвестно"
+            is_single_use = session.execute(having_stmt).scalar_one_or_none()
 
-        # удаляем запись
-        session.delete(main_obj)
+            # получаем имя товара
+            dict_obj = session.get(DictTable, item_id)
+            item_name = dict_obj.item if dict_obj else "Неизвестно"
 
-        # если товар использовался только один раз — удаляем и его
-        if is_single_use:
-            if dict_obj:
-                session.delete(dict_obj)
-                print(f"Удалено из main и items: ...{item_name}")
-        else:
-            print(f"Удалено только из main: ...{item_name}")
+            # удаляем запись
+            session.delete(main_obj)
 
-        session.commit()
-        return item_name
+            # если товар использовался один раз — удаляем и его
+            if is_single_use:
+                if dict_obj:
+                    session.delete(dict_obj)
+                    print(f"Удалено из main и items: ...{item_name}")
+            else:
+                print(f"Удалено только из main: ...{item_name}")
+
+            session.commit()
+            return item_name
+
+        except Exception as e:
+            session.rollback()
+            print(f"Ошибка удаления: {e}")
