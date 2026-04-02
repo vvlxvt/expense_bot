@@ -97,9 +97,10 @@ def refund(session: Session, user_id: int, amount: float):
 
 def get_balance(user_id: int):
     with Session(engine) as session:
-        return session.scalar(
+        result = session.scalar(
             select(UserTable.deposit).where(UserTable.telegram_id == user_id)
         )
+        return round(result, 2)
 
 
 def add_new_data(instance: Expense):
