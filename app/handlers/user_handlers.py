@@ -19,6 +19,7 @@ from app.database import (
     spend_month,
     spend_today,
     get_balance,
+    DB_Manager,
 )
 from app.services import prepare_book, get_month_range, books
 from app.config import BookState
@@ -85,24 +86,31 @@ async def help_command(message: Message):
 
 
 @router.message(Command("deposit"))
-async def add_deposit(message: Message):
+async def add_deposit(message: Message, db: DB_Manager):
     try:
-        amount = float(message.text.split()[1])
+        # Разбиваем текст команды, чтобы достать число
+        parts = message.text.split()
+        if len(parts) < 2:
+            raise ValueError
+        amount = float(parts[1])
     except (IndexError, ValueError):
-        await message.answer("Введите сумму: /deposit 100")
+        await message.answer("Введите сумму в виде: /deposit 100")
         return
 
-    user_id = get_user_id(message)
-    top_up(user_id, amount)
+    user_id = message.from_user.id  # Используем напрямую из сообщения
 
-    await message.answer(f"Баланс пополнен на {amount}")
+    async with db.get_session() as session:
+        await top_up(session, user_id, amount)
+
+    await message.answer(f"✅ Баланс пополнен на {amount}")
 
 
 @router.message(Command("balance"))
-async def balance(message: Message):
-    user_id = get_user_id(message)
-    balance = get_balance(user_id)
-    await message.answer(f"Ваш баланс {balance} лари")
+async def balance(message: Message, db: DB_Manager):
+    user_id = message.from_user.id
+    async with db.get_session() as session:
+        current_balance = await get_balance(session, user_id)
+    await message.answer(f"Ваш баланс: {current_balance} лари")
 
 
 # -----------------------------
@@ -120,18 +128,21 @@ async def charts(message: Message):
 # EXPENSE COMMANDS
 # -----------------------------
 @router.message(Command("today"))
-async def today(message: Message):
+async def today(message: Message, db: DB_Manager):
     user_id = get_user_id(message)
-    total = spend_today(user_id)
+    async with db.get_session() as session:
+        total = await spend_today(session, user_id)
     formatted = message.date.strftime("%d-%m-%Y")
     await message.answer(f"Сегодня <i>{formatted}</i> я потратил/а <b>{total}</b> GEL")
 
 
 @router.message(Command("week"))
-async def week(message: Message):
+async def week(message: Message, db: DB_Manager):
     user_id = get_user_id(message)
-    res = get_stat_week(user_id)
-    total = round(spend_week(user_id) or 0, 2)
+    async with db.get_session() as session:
+        res = await get_stat_week(session, user_id)
+        result = await spend_week(session, user_id)
+        total = round(result or 0, 2)
     await message.answer(f"<b>{res}</b>\nС начала недели потрачено: {total} GEL")
 
 
@@ -144,9 +155,10 @@ async def choose_month(message: Message):
 
 
 @router.message(Command("my_month"))
-async def send_book(message: Message, state: FSMContext):
+async def send_book(message: Message, state: FSMContext, db: DB_Manager):
     user_id = get_user_id(message)
-    result = get_my_expenses(user_id)
+    async with db.get_session() as session:
+        result = await get_my_expenses(session, user_id)
     prepare_book(result, user_id)
 
     if not books.get(user_id):
@@ -158,9 +170,10 @@ async def send_book(message: Message, state: FSMContext):
 
 
 @router.message(Command("tanya"))
-async def send_book(message: Message, state: FSMContext):
+async def send_book(message: Message, state: FSMContext, db: DB_Manager):
     user_id = 1194999116
-    result = get_my_expenses(user_id)
+    async with db.get_session() as session:
+        result = await get_my_expenses(session, user_id)
     prepare_book(result, user_id)
 
     if not books.get(user_id):
@@ -172,9 +185,10 @@ async def send_book(message: Message, state: FSMContext):
 
 
 @router.message(Command("del_last_note"))
-async def delete_last(message: Message):
+async def delete_last(message: Message, db: DB_Manager):
     user_id = get_user_id(message)
-    last = del_last_note(user_id)
+    async with db.get_session() as session:
+        last = await del_last_note(session, user_id)
     await message.answer(f"🗑 Удалена запись: {last}")
 
 
@@ -182,7 +196,7 @@ async def delete_last(message: Message):
 # UNIVERSAL BOOK HANDLER (READING / GROUPED)
 # -----------------------------
 @router.callback_query(F.data.in_({"prev", "next", "close", "group"}))
-async def book_handler(callback: CallbackQuery, state: FSMContext):
+async def book_handler(callback: CallbackQuery, state: FSMContext, db: DB_Manager):
     user_id = get_user_id(callback)
     current_state = await state.get_state()
     data = await state.get_data()
@@ -196,10 +210,11 @@ async def book_handler(callback: CallbackQuery, state: FSMContext):
         return await callback.answer()
 
     # -------------------------------
-    # Кнопка "group" — перейти на grouped
+    # Кнопка "group" — сгруппировать по категориям
     # -------------------------------
     if callback.data == "group":
-        result = get_my_expenses_group(user_id)
+        async with db.get_session() as session:
+            result = await get_my_expenses_group(session, user_id)
         prepared_result = "\n".join(result)
         if not result:
             return await callback.answer("Нет данных для группировки", show_alert=True)
@@ -251,12 +266,12 @@ async def book_handler(callback: CallbackQuery, state: FSMContext):
 # MONTH STATISTICS
 # -----------------------------
 @router.callback_query(F.data.in_(LEXICON_MONTH.keys()))
-async def choose_month_callback(callback: CallbackQuery):
+async def choose_month_callback(callback: CallbackQuery, db: DB_Manager):
     user_id = get_user_id(callback)
     month = callback.data
-
-    res = get_stat_month(user_id, month)
-    total = spend_month(user_id, month)
+    async with db.get_session() as session:
+        res = await get_stat_month(session, user_id, month)
+        total = await spend_month(session, user_id, month)
 
     await callback.message.edit_text(
         f"<u>Траты за <b>{LEXICON_MONTH[month]}</b>:</u>\n"
@@ -268,11 +283,12 @@ async def choose_month_callback(callback: CallbackQuery):
 
 
 @router.callback_query(F.data == "_another")
-async def show_another(callback: CallbackQuery):
+async def show_another(callback: CallbackQuery, db: DB_Manager):
     user_id = get_user_id(callback)
     month = callback.message.text
-    start_date, end_date = get_month_range(month)
-    result = get_another(user_id, start_date, end_date)
+    async with db.get_session() as session:
+        start_date, end_date = get_month_range(month)
+        result = await get_another(session, user_id, start_date, end_date)
 
     await callback.message.answer(
         f"<u>Другое за <b>{LEXICON_MONTH[month]}</b>:</u>\n{result}"

@@ -8,12 +8,9 @@ from app.database import (
     CatTable,
     spend,
 )
-from app.database.functions import engine
 from app.lexicon.lexicon import LEXICON_KEYS
 import re
 from sqlalchemy import select
-from sqlalchemy.orm import Session
-from app.config import engine
 
 
 def make_item_price(note: str) -> tuple[str, float]:
@@ -46,20 +43,22 @@ def make_item_price(note: str) -> tuple[str, float]:
 #     return session.execute(query).scalar_one_or_none()
 
 
-def get_category(item: str) -> str | None:
+async def get_category(session, item: str) -> str | None:
     """Возвращает текстовое название(cat) из таблицы категории для товара (item)."""
     clean_item = item.strip().lower()
-    with Session(engine) as session:
-        query = (
-            select(CatTable.cat)
-            .join(DictTable)  # связь по ForeignKey DictTable.cat_id
-            .where(DictTable.item == clean_item)
-            .limit(1)
-        )
-        return session.execute(query).scalar_one_or_none()
+    query = (
+        select(CatTable.cat)
+        .join(DictTable)  # связь по ForeignKey DictTable.cat_id
+        .where(DictTable.item == clean_item)
+        .limit(1)
+    )
+    result = await session.execute(query)
+    return result.scalar_one_or_none()
 
 
-def process_msg_to_expenses(raw_messages: str, user_id: int) -> str | None:
+async def process_msg_to_expenses(
+    session, raw_messages: str, user_id: int
+) -> str | None:
     """
     Создает запись о трате ТОЛЬКО один раз:
     - если категория известна -> сразу пишем в БД;
@@ -69,7 +68,7 @@ def process_msg_to_expenses(raw_messages: str, user_id: int) -> str | None:
 
     for line in filter(None, map(str.strip, raw_messages.splitlines())):
         item_name, price = make_item_price(line)
-        category_name = get_category(item_name)
+        category_name = await get_category(session, item_name)
 
         if category_name:
             # Уже знаем категорию: сразу сохраняем
@@ -81,7 +80,8 @@ def process_msg_to_expenses(raw_messages: str, user_id: int) -> str | None:
                 category=category_name,
                 flag=False,
             )
-            add_new_data(expense)
+
+            await add_new_data(session, expense)
             # spend(user_id, expense.price)
             results.append(category_name)
         else:

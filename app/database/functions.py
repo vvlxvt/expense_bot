@@ -1,7 +1,5 @@
-from sqlalchemy import select, func
-from sqlalchemy.orm import Session
-from app.config import engine
-from .conn_db import session, DictTable, MainTable, CatTable, UserTable
+from sqlalchemy import select, func, Float
+from .models import DictTable, MainTable, CatTable, UserTable
 from datetime import datetime, timedelta, date, time
 from app.services.aux_functions import (
     get_month_range,
@@ -11,83 +9,86 @@ from app.services.aux_functions import (
 from app.database import refund
 
 
-def get_cumulative_data(category: str, month: str):
+async def get_cumulative_data(session, category: str, month: str):
+    # Предполагаем, что get_month_range возвращает объекты date или datetime
     start_date, end_date = get_month_range(month)
 
-    with Session(engine) as session:
-        stmt = (
-            select(
-                func.date(MainTable.created).label("day"),
-                func.round(func.sum(MainTable.price), 2).label("daily_total"),
-            )
-            .join(DictTable, MainTable.item_id == DictTable.id)
-            .join(CatTable, DictTable.cat_id == CatTable.id)
-            .where(
-                CatTable.cat == category,
-                MainTable.created.between(start_date, end_date),
-            )
-            .group_by(func.date(MainTable.created))
-            .order_by(func.date(MainTable.created))
+    # Убираем лишний async with session, так как сессия пришла снаружи уже открытой
+    stmt = (
+        select(
+            func.date(MainTable.created).label("day"),
+            func.cast(func.sum(MainTable.price), Float).label("daily_total"),
         )
+        .join(DictTable, MainTable.item_id == DictTable.id)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .where(
+            CatTable.cat == category,
+            MainTable.created >= start_date,
+            MainTable.created <= end_date,
+        )
+        .group_by(func.date(MainTable.created))
+        .order_by(func.date(MainTable.created))
+    )
 
-        result = session.execute(stmt).all()
+    result = await session.execute(stmt)
+    rows = result.all()  # Получаем все строки
 
-    if not result:
+    if not rows:
         return [], []
 
     days = []
     cumulative = []
-    total = 0
+    total = 0.0
 
-    for r in result:
-        day_value = r.day
+    for r in rows:
+        # Обработка даты
+        if isinstance(r.day, str):
+            day_obj = datetime.strptime(r.day, "%Y-%m-%d").date()
+        else:
+            day_obj = r.day  # SQLAlchemy часто сам конвертирует в date объект
 
-        if isinstance(day_value, str):
-            day_value = datetime.strptime(day_value, "%Y-%m-%d").date()
+        days.append(day_obj.day)
 
-        days.append(day_value.day)
-        total += float(r.daily_total)
+        # Суммируем
+        total += float(r.daily_total or 0)
         cumulative.append(round(total, 2))
 
     return days, cumulative
 
 
-def get_three_month_avg(category: str, month: str) -> float:
-    """
-    Средний расход по категории за предыдущие 3 месяца (по месяцам),
-    относительно выбранного месяца. Месяцы без трат учитываются как 0.
-    """
+async def get_three_month_avg(session, category: str, month: str) -> float:
+    # Получаем общий диапазон за 3 месяца (от начала самого раннего до конца выбранного)
     ranges = get_previous_n_month_ranges(month, 3)
-    monthly_totals: list[float] = []
-
-    with Session(engine) as session:
-        for start_date, end_date in ranges:
-            stmt = (
-                select(func.coalesce(func.sum(MainTable.price), 0))
-                .join(DictTable, MainTable.item_id == DictTable.id)
-                .join(CatTable, DictTable.cat_id == CatTable.id)
-                .where(
-                    CatTable.cat == category,
-                    MainTable.created.between(start_date, end_date),
-                )
-            )
-
-            total = session.execute(stmt).scalar()
-            monthly_totals.append(float(total))
-
-    if not monthly_totals:
+    if not ranges:
         return 0.0
 
-    avg = sum(monthly_totals) / len(monthly_totals)
+    overall_start = ranges[-1][0]  # начало самого старого месяца
+    overall_end = ranges[0][1]  # конец текущего выбранного месяца
+
+    stmt = (
+        select(func.coalesce(func.sum(MainTable.price), 0))
+        .join(DictTable, MainTable.item_id == DictTable.id)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .where(
+            CatTable.cat == category,
+            MainTable.created >= overall_start,
+            MainTable.created <= overall_end,
+        )
+    )
+
+    result = await session.execute(stmt)
+    total_sum = result.scalar() or 0
+
+    # Делим строго на 3, так как логика функции подразумевает среднее за квартал
+    avg = float(total_sum) / 3
     return round(avg, 2)
 
 
-def get_all_categories() -> list[str]:
-    # вернуть список уникальных категорий из основой таблицы
-    with Session(engine) as session:
-        stmt = select(CatTable.cat)
-        result = session.execute(stmt).all()
-        return [row[0] for row in result]
+async def get_all_categories(session) -> list[str]:
+    stmt = select(CatTable.cat).distinct().order_by(CatTable.cat)
+    result = await session.execute(stmt)
+    # scalars() сразу превращает результат в список значений первого столбца
+    return list(result.scalars().all())
 
 
 def format_output(res: list[tuple], width: int = 15) -> list[str]:
@@ -106,145 +107,140 @@ def format_output(res: list[tuple], width: int = 15) -> list[str]:
     return [f"{key:.<{max_len + 3}} {value}" for key, value in filtered]
 
 
-def get_stat_month(user_id, mm: str):
+async def get_stat_month(session, user_id, mm: str):
     """
     :param user_id: telegram user_id
     :return: cumulative expenses by category for the chosen month
     """
     start_date, end_date = get_month_range(mm)
-
-    with Session(engine) as session:
-
-        stmt = (
-            select(
-                CatTable.cat,
-                func.round(func.sum(MainTable.price), 2).label("total_price"),
-            )
-            .join(DictTable, MainTable.item_id == DictTable.id)
-            .join(CatTable, DictTable.cat_id == CatTable.id)
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                MainTable.created >= start_date,
-                MainTable.created <= end_date,
-            )
-            .group_by(CatTable.cat)
-            .order_by(func.sum(MainTable.price).desc())
+    stmt = (
+        select(
+            CatTable.cat,
+            func.round(func.sum(MainTable.price), 2).label("total_price"),
         )
-        result = session.execute(stmt).all()
-    return "\n".join(format_output(result))
+        .join(DictTable, MainTable.item_id == DictTable.id)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= end_date,
+        )
+        .group_by(CatTable.cat)
+        .order_by(func.sum(MainTable.price).desc())
+    )
+    result = await session.execute(stmt)
+    month_result = result.all()
+    return "\n".join(format_output(month_result))
 
 
-def get_stat_week(user_id: int) -> list[tuple]:
+async def get_stat_week(session, user_id: int) -> list[tuple]:
     """
     :param user_id: telegram user_id
     :return: cumulative expenses by category for the current week
     """
     start_date, end_date = get_week_range()
 
-    with Session(engine) as session:
-        stmt = (
-            select(
-                CatTable.cat,
-                func.round(func.sum(MainTable.price), 2).label("total_price"),
-            )
-            .join(DictTable, MainTable.item_id == DictTable.id)
-            .join(CatTable, DictTable.cat_id == CatTable.id)
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                MainTable.created >= start_date,
-                MainTable.created <= end_date,
-            )
-            .group_by(CatTable.cat)
-            .order_by(func.sum(MainTable.price).desc())
+    stmt = (
+        select(
+            CatTable.cat,
+            func.round(func.sum(MainTable.price), 2).label("total_price"),
         )
+        .join(DictTable, MainTable.item_id == DictTable.id)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= end_date,
+        )
+        .group_by(CatTable.cat)
+        .order_by(func.sum(MainTable.price).desc())
+    )
 
-        result = session.execute(stmt).all()
-    return "\n".join(format_output(result))
+    result = await session.execute(stmt)
+    week_res = result.all()
+    return "\n".join(format_output(week_res))
 
 
-def spend_today(user_id) -> float:
+async def spend_today(session, user_id) -> float:
     start_date = datetime.combine(datetime.now().date(), time.min)
 
-    with Session(engine) as session:
-        stmt = (
-            select(func.coalesce(func.sum(MainTable.price), 0.0))
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                MainTable.created >= start_date,
-            )
+    stmt = (
+        select(func.coalesce(func.sum(MainTable.price), 0.0))
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            MainTable.created >= start_date,
         )
-
-        result = session.scalar(stmt)
-
+    )
+    result = await session.scalar(stmt)
     return result
 
 
-def spend_week(user_id):
+async def spend_week(session, user_id):
     """
     :param user_id: telegram user_id
     :return: The amount of money spent current week
     """
     start_date, end_date = get_week_range()
-    with Session(engine) as session:
-        stmt = (
-            select(func.sum(MainTable.price))
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                MainTable.created >= start_date,
-                MainTable.created <= end_date,
-            )
+    stmt = (
+        select(func.sum(MainTable.price))
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= end_date,
         )
-        result = session.execute(stmt).scalar()
+    )
+    result = await session.execute(stmt)
+    week_result = result.scalar()
 
-    return result
+    return week_result
 
 
-def spend_month(user_id, month):
+async def spend_month(session, user_id, month):
     start_date, end_date = get_month_range(month)
-    with Session(engine) as session:
-        stmt = (
-            select(func.round(func.sum(MainTable.price)), 2)
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                MainTable.created >= start_date,
-                MainTable.created <= end_date,
-            )
+    stmt = (
+        select(func.round(func.sum(MainTable.price), 2))  # Исправлено закрытие скобок
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= end_date,
         )
-        result = session.execute(stmt).scalar()
-    return result
+    )
+    # Используем scalar(), так как нам нужно одно число
+    result = await session.scalar(stmt)
+    return result or 0.0
 
 
-def get_my_expenses(user_id: int):
+async def get_my_expenses(session, user_id: int):
     """
     получить все траты с начала месяца портянкой с пагинацией
     """
-    with Session(engine) as session:
-        now = datetime.now()
-        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.now()
+    start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        stmt = (
-            select(DictTable.item, MainTable.price)
-            .join(DictTable, MainTable.item_id == DictTable.id)
-            .join(CatTable, DictTable.cat_id == CatTable.id)
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                MainTable.created >= start_date,
-                MainTable.created <= now,
-            )
+    stmt = (
+        select(DictTable.item, MainTable.price)
+        .join(DictTable, MainTable.item_id == DictTable.id)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= now,
         )
-        result = session.execute(stmt).all()
-        total = round(sum(r[1] for r in result), 2)
-        result.append(("итого:", total))
-    return format_output(result)
+    )
+    result = await session.execute(stmt)
+    expenses = result.all()
+    total = round(sum(r[1] for r in expenses), 2)
+    expenses.append(("итого:", total))
+    return format_output(expenses)
 
 
-def get_my_expenses_group(user_id):
+async def get_my_expenses_group(session, user_id):
     # получить мои траты с начала месяца сгруппированными
     _month = datetime.now().month
     _year = datetime.now().year
@@ -253,118 +249,114 @@ def get_my_expenses_group(user_id):
     )
     end_date = datetime.now().replace(second=0, microsecond=0)
 
-    with Session(engine) as session:
-        stmt = (
-            select(CatTable.cat, func.round(func.sum(MainTable.price), 2))
-            .join(DictTable, MainTable.item_id == DictTable.id)
-            .join(CatTable, DictTable.cat_id == CatTable.id)
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                MainTable.created >= start_date,
-                MainTable.created <= end_date,
-            )
-            .group_by(CatTable.cat)
-            .order_by(func.sum(MainTable.price).desc())
+    stmt = (
+        select(CatTable.cat, func.round(func.sum(MainTable.price), 2))
+        .join(DictTable, MainTable.item_id == DictTable.id)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            MainTable.created >= start_date,
+            MainTable.created <= end_date,
         )
-        result = session.execute(stmt).all()
+        .group_by(CatTable.cat)
+        .order_by(func.sum(MainTable.price).desc())
+    )
+    result = await session.execute(stmt)
+    grouped_res = result.all()
 
-    total = round(sum(item[1] if item else 0 for item in result), 2)
-    result.append(
+    total = round(sum(item[1] if item else 0 for item in grouped_res), 2)
+    grouped_res.append(
         (
             "итого: ",
             total,
         )
     )
-    return format_output(result)
+    return format_output(grouped_res)
 
 
-def get_another(user_id, start_date, end_date):
-    with Session(engine) as session:
-        stmt = (
-            select(DictTable.item, func.round(MainTable.price, 2).label("price"))
-            .join(DictTable, MainTable.item_id == DictTable.id)
-            .join(CatTable, DictTable.cat_id == CatTable.id)
+async def get_another(session, user_id, start_date, end_date):
+    stmt = (
+        select(DictTable.item, func.round(MainTable.price, 2).label("price"))
+        .join(DictTable, MainTable.item_id == DictTable.id)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            CatTable.cat == "др. продукты",
+            MainTable.created.between(start_date, end_date),
+        )
+    )
+
+    total_stmt = (
+        select(func.round(func.sum(MainTable.price), 2))
+        .join(DictTable, MainTable.item_id == DictTable.id)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .join(UserTable, MainTable.user_id == UserTable.id)
+        .where(
+            UserTable.telegram_id == user_id,
+            CatTable.cat == "др. продукты",
+            MainTable.created.between(start_date, end_date),
+        )
+    )
+
+    result = await session.execute(stmt)
+    other_list = result.all()
+    total = await session.execute(total_stmt)
+    other_total = total.scalar() or 0
+    other_list.append(("итого:", other_total))
+
+    return "\n".join(format_output(other_list))
+
+
+async def del_last_note(session, user_id: int):  # Теперь async
+    try:
+        last_stmt = (
+            select(MainTable)
             .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                CatTable.cat == "др. продукты",
-                MainTable.created.between(start_date, end_date),
-            )
+            .where(UserTable.telegram_id == user_id)
+            .order_by(MainTable.id.desc())
+            .limit(1)
         )
 
-        total_stmt = (
-            select(func.round(func.sum(MainTable.price), 2))
-            .join(DictTable, MainTable.item_id == DictTable.id)
-            .join(CatTable, DictTable.cat_id == CatTable.id)
-            .join(UserTable, MainTable.user_id == UserTable.id)
-            .where(
-                UserTable.telegram_id == user_id,
-                CatTable.cat == "др. продукты",
-                MainTable.created.between(start_date, end_date),
-            )
+        result = await session.execute(last_stmt)  # Добавлен await
+        main_obj = result.scalar_one_or_none()
+
+        if not main_obj:
+            return None
+
+        item_id = main_obj.item_id
+        amount = main_obj.price
+
+        # Если refund асинхронный, добавьте await
+        await refund(session, user_id, amount)
+
+        # Проверка на единственное использование
+        having_stmt = (
+            select(MainTable.item_id)
+            .where(MainTable.item_id == item_id)
+            .group_by(MainTable.item_id)
+            .having(func.count(MainTable.id) == 1)
         )
 
-        result = session.execute(stmt).all()
-        total = session.execute(total_stmt).scalar() or 0
+        check_res = await session.execute(having_stmt)
+        is_single_use = check_res.scalar_one_or_none()
 
-        result.append(("итого:", total))
+        dict_obj = await session.get(DictTable, item_id)  # Добавлен await
+        item_name = dict_obj.item if dict_obj else "Неизвестно"
 
-    return "\n".join(format_output(result))
+        await session.delete(main_obj)  # Добавлен await
 
+        if is_single_use and dict_obj:
+            await session.delete(dict_obj)  # Добавлен await
 
-def del_last_note(user_id: int):
-    with Session(engine) as session:
-        try:
-            # получаем последнюю запись пользователя
-            last_stmt = (
-                select(MainTable)
-                .join(UserTable, MainTable.user_id == UserTable.id)
-                .where(UserTable.telegram_id == user_id)
-                .order_by(MainTable.id.desc())
-                .limit(1)
-            )
+        # Commit здесь НЕ НУЖЕН, если вы вызываете эту функцию
+        # внутри вашего DB_Manager.__aexit__, он сделает это сам.
+        # Но если вызываете отдельно — оставьте await session.commit()
 
-            main_obj = session.execute(last_stmt).scalar_one_or_none()
+        return item_name
 
-            if not main_obj:
-                print("У пользователя нет записей")
-                return None
-
-            item_id = main_obj.item_id
-            amount = main_obj.price  # 💰 сумма, которую нужно вернуть
-
-            # получаем пользователя
-            refund(session, user_id, amount)
-
-            # проверка: используется ли item только один раз
-            having_stmt = (
-                select(MainTable.item_id)
-                .where(MainTable.item_id == item_id)
-                .group_by(MainTable.item_id)
-                .having(func.count(MainTable.id) == 1)
-            )
-
-            is_single_use = session.execute(having_stmt).scalar_one_or_none()
-
-            # получаем имя товара
-            dict_obj = session.get(DictTable, item_id)
-            item_name = dict_obj.item if dict_obj else "Неизвестно"
-
-            # удаляем запись
-            session.delete(main_obj)
-
-            # если товар использовался один раз — удаляем и его
-            if is_single_use:
-                if dict_obj:
-                    session.delete(dict_obj)
-                    print(f"Удалено из main и items: ...{item_name}")
-            else:
-                print(f"Удалено только из main: ...{item_name}")
-
-            session.commit()
-            return item_name
-
-        except Exception as e:
-            session.rollback()
-            print(f"Ошибка удаления: {e}")
+    except Exception as e:
+        await session.rollback()  # Добавлен await
+        print(f"Ошибка удаления: {e}")
+        raise  # Лучше пробросить ошибку дальше
