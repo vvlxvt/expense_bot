@@ -16,6 +16,7 @@ class Config:
     app_env: str
     base_webhook_url: str
     db_url: str
+    db_path: str
 
 
 def load_config(path: str | None) -> Config:
@@ -29,6 +30,7 @@ def load_config(path: str | None) -> Config:
         app_env=env.str("APP_ENV", "development"),
         base_webhook_url=env.str("BASE_WEBHOOK_URL", ""),
         db_url=f"sqlite+aiosqlite:///{env.str('DB_PATH')}",
+        db_path=env.str("DB_PATH"),
     )
 
 
