@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from environs import Env
 from sqlalchemy import create_engine, Engine
+from aiogram.fsm.state import StatesGroup, State
 
 
 @dataclass
@@ -14,11 +15,7 @@ class Config:
     tg_bot: TgBot
     app_env: str
     base_webhook_url: str
-    db_path: str
-    engine: Engine = field(init=False)  # не передаётся в конструктор
-
-    def __post_init__(self):
-        self.engine = create_engine(f"sqlite:///{self.db_path}", echo=False)
+    db_url: str
 
 
 def load_config(path: str | None) -> Config:
@@ -31,14 +28,8 @@ def load_config(path: str | None) -> Config:
         ),
         app_env=env.str("APP_ENV", "development"),
         base_webhook_url=env.str("BASE_WEBHOOK_URL", ""),
-        db_path=env.str("DB_PATH", "data/real.db"),
+        db_url=f"sqlite+aiosqlite:///{env.str('DB_PATH')}",
     )
-
-
-conf = load_config(None)
-engine = conf.engine
-
-from aiogram.fsm.state import StatesGroup, State
 
 
 class BookState(StatesGroup):

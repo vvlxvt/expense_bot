@@ -1,19 +1,17 @@
 import asyncio
 import logging
 import sys
-from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiohttp import web
-import aiohttp_jinja2, jinja2, json
-
+import aiohttp_jinja2, jinja2
 from app import config
+from app.database import DB_Manager
 from app.keyboards import set_main_menu
-from app.database.functions import get_cumulative_data, get_all_categories, get_three_month_avg
 from app import handlers
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from app.services import daily_timer
-
+from app.web.views import stats_page
 
 conf = config.load_config(None)
 TOKEN = conf.tg_bot.token
@@ -36,59 +34,43 @@ async def on_startup(bot: Bot):
 def main():
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
+    # 1. Инициализация базы (уже на месте)
+    db = DB_Manager(url=conf.db_url, echo=False)
+
+    # 2. Настройка бота
     bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
     dp = Dispatcher()
+
+    # Передаем db в Dispatcher, чтобы он был доступен во всех хендлерах
+    # Это работает для polling и для webhook
+    dp["db"] = db
 
     dp.include_router(handlers.user_handlers.router)
     dp.include_router(handlers.other_handlers.router)
     dp.startup.register(on_startup)
 
+    # 3. Настройка Web App
     app = web.Application()
-    aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader('app/templates'))
+    app["db"] = db  # Для веба (stats_page)
 
-    async def stats_page(request: web.Request):
-        category = request.query.get("category")
-        month = request.query.get("month")
+    aiohttp_jinja2.setup(app, loader=jinja2.FileSystemLoader("app/templates"))
 
-        # Если нет категории — перенаправляем на категорию "Уля" и текущий месяц
-        if not category:
-            current_month = datetime.now().strftime("%B").capitalize()  # пример: "October"
-            raise web.HTTPFound(f"/stats?category=Уля&month={current_month[:3]}")
+    # Регистрация маршрутов
+    app.router.add_get("/stats", stats_page)
+    app.router.add_static("/static/", path="app/static", name="static")
 
-        # Если месяц не указан — подставляем текущий
-        if not month:
-            month = datetime.now().strftime("%b")
-
-        days, cumulative = get_cumulative_data(category, month)
-        avg3m = get_three_month_avg(category, month)
-        categories = get_all_categories()
-
-        # подготовим список месяцев как сокращения Jan..Dec
-        from calendar import month_abbr
-        months = [abbr for abbr in month_abbr if abbr]
-
-        return aiohttp_jinja2.render_template(
-            'stats.html',
-            request,
-            {
-                "category": category,
-                "required_month": month,
-                "days": json.dumps(days),
-                "cumulative": json.dumps(cumulative),
-                "categories": categories,
-                "months": months,
-                "avg3m": avg3m
-            }
-        )
-
-    app.router.add_get('/stats', stats_page)
-    # serve static files
-    app.router.add_static('/static/', path='app/static', name='static')
-
-    webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    # ВАЖНО: передаем db в SimpleRequestHandler
+    # Аргументы, переданные в kwargs (после bot),
+    # прокидываются в хендлеры aiogram при обработке апдейтов.
+    webhook_handler = SimpleRequestHandler(
+        dispatcher=dp, bot=bot, db=db  # <--- Добавляем сюда
+    )
     webhook_handler.register(app, path=WEBHOOK_PATH)
-    setup_application(app, dp, bot=bot)
 
+    # Также передаем в setup_application, чтобы aiogram знал о зависимостях
+    setup_application(app, dp, bot=bot, db=db)  # <--- И сюда
+
+    # 4. Запуск
     print(f"🚀 Running in {APP_ENV} mode")
     web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
 
