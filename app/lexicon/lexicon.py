@@ -27,15 +27,14 @@ LEXICON_MONTH: dict[str, str] = {
     "dec": "декабрь",
 }
 
-
 LEXICON_COMMANDS: dict[str, str] = {
     "/del_last_note": "удалить последнюю запись",
+    "/my_month": "мои траты с начала месяца",
+    "/balance": "💶 мой баланс",
     "/today": "траты за сегодня",
     "/week": "траты за неделю",
     "/month": "траты за месяц",
-    "/my_month": "мои траты с начала месяца",
-    "/charts": "графики",
-    "/balance": "мой баланс",
+    "/charts": "📈графики",
 }
 
 LEXICON_SUBNAMES: dict[str, str] = {

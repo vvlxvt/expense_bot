@@ -1,4 +1,6 @@
 import datetime
+import enum
+from sqlalchemy import Enum as SAEnum
 
 from sqlalchemy import (
     create_engine,
@@ -10,8 +12,7 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
-from app.config import engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, relationship
 
 
 class Base(DeclarativeBase):
@@ -60,8 +61,22 @@ class UserTable(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
     name: Mapped[str] = mapped_column(String, nullable=True)
+    # deposit как кэш для быстрого доступа
     deposit: Mapped[float] = mapped_column(Float, default=0.0)
 
 
-Base.metadata.create_all(bind=engine)
-session = Session(engine)
+# class TransactionTable(Base):
+#     __tablename__ = "transactions"
+#
+#     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+#     user_id: Mapped[int] = mapped_column(
+#         ForeignKey("users.id"), nullable=False, index=True
+#     )
+#     amount: Mapped[float] = mapped_column(Float, nullable=False)
+#     created: Mapped[datetime.datetime] = mapped_column(
+#         DateTime, default=datetime.datetime.now, index=True
+#     )
+
+
+# Base.metadata.create_all(bind=engine)
+# session = Session(engine)
