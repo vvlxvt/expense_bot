@@ -6,6 +6,7 @@ from aiogram.enums import ParseMode
 from aiohttp import web
 import aiohttp_jinja2, jinja2
 from app import config
+from app.ml.ml_model import retrain_model
 from app.database import DB_Manager
 from app.keyboards import set_main_menu
 from app import handlers
@@ -24,10 +25,18 @@ WEB_SERVER_HOST = "0.0.0.0"
 WEB_SERVER_PORT = 80
 
 
-async def on_startup(bot: Bot):
+async def handle_retrain(db):
+    try:
+        await retrain_model(db)
+    except Exception as e:
+        print(f"❌ retrain error: {e}")
+
+
+async def on_startup(bot: Bot, db: DB_Manager):
     await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}")
     await set_main_menu(bot)
     asyncio.create_task(daily_timer())
+    asyncio.create_task(handle_retrain(db))
     print(f"✅ Webhook set for {APP_ENV} environment")
 
 
@@ -59,7 +68,7 @@ def main():
     app.router.add_get("/stats", stats_page)
     app.router.add_static("/static/", path="app/static", name="static")
 
-    # ВАЖНО: передаем db в SimpleRequestHandler
+    # передаем db в SimpleRequestHandler
     # Аргументы, переданные в kwargs (после bot),
     # прокидываются в хендлеры aiogram при обработке апдейтов.
     webhook_handler = SimpleRequestHandler(

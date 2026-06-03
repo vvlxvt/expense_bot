@@ -91,6 +91,16 @@ async def get_all_categories(session) -> list[str]:
     return list(result.scalars().all())
 
 
+async def get_items_with_categories(session) -> list[tuple[str, int]]:
+    stmt = (
+        select(DictTable.item, DictTable.cat_id)
+        .where(DictTable.cat_id.isnot(None))  # только размеченные
+        .order_by(DictTable.id)
+    )
+    result = await session.execute(stmt)
+    return result.all()  # список (item, cat_id)
+
+
 def format_output(res: list[tuple], width: int = 15) -> list[str]:
     """
     Преобразует кортежи в строки с выравниванием второго значения столбиком.

@@ -12,6 +12,8 @@ from app.lexicon.lexicon import LEXICON_KEYS
 import re
 from sqlalchemy import select
 
+from app.ml.categorizer import categorizer
+
 
 def make_item_price(note: str) -> tuple[str, float]:
     """Парсит строку на товар и цену. Возвращает (название, цена)."""
@@ -68,6 +70,8 @@ async def process_msg_to_expenses(
 
     for line in filter(None, map(str.strip, raw_messages.splitlines())):
         item_name, price = make_item_price(line)
+        result = categorizer.predict(item_name)
+        print(result)
         category_name = await get_category(session, item_name)
 
         if category_name:

@@ -24,6 +24,7 @@ __all__ = (
     "get_cumulative_data",
     "get_three_month_avg",
     "get_all_categories",
+    "get_items_with_categories",
 )
 
 from .my_queue import no_subs, UserQueue
@@ -44,4 +45,5 @@ from .functions import (
     get_cumulative_data,
     get_three_month_avg,
     get_all_categories,
+    get_items_with_categories,
 )

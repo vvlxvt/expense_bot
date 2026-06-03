@@ -69,6 +69,9 @@ async def get_or_create_item_id(
 
 
 async def top_up(session: AsyncSession, user_id, amount):
+    """
+    пополнить баланс
+    """
     await session.execute(
         update(UserTable)
         .where(UserTable.telegram_id == user_id)

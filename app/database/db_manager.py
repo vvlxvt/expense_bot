@@ -21,20 +21,3 @@ class DB_Manager:
                 raise
             finally:
                 await session.close()
-
-
-# async def main():
-#
-#     db = DB_Manager("sqlite+aiosqlite:///C:/users/vital/downloads/master.db", True)
-#     async with db.get_session() as session:
-#         result = await session.execute(select(UserTable))
-#         users = result.scalars().all()
-#         for user in users:
-#             print({k: v for k, v in user.__dict__.items() if not k.startswith("_")})
-#
-#
-# # Запуск через asyncio
-# import asyncio
-#
-# if __name__ == "__main__":
-#     asyncio.run(main())

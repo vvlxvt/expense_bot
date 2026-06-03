@@ -138,7 +138,7 @@ async def process_group_press(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.in_(LEXICON_KEYS))
-async def category_select(callback: CallbackQuery):
+async def category_select(callback: CallbackQuery, db: DB_Manager):
     user_id = get_user_id(callback)
 
     expense = form_expense_instance(no_subs, callback)
@@ -146,7 +146,8 @@ async def category_select(callback: CallbackQuery):
     if not expense:
         return await callback.answer("Ошибка сохранения", show_alert=True)
 
-    add_new_data(expense)
+    async with db.get_session() as session:
+        await add_new_data(session, expense)
     no_subs.dequeue(user_id)
 
     await callback.message.answer(f"Сохранено: {expense.category}")
