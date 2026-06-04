@@ -1,23 +1,20 @@
-from aiogram.types import CallbackQuery
-from app.database import (
-    no_subs,
-    UserQueue,
-    Expense,
-    add_new_data,
-    DictTable,
-    CatTable,
-    spend,
-)
-from app.lexicon.lexicon import LEXICON_KEYS
 import re
+
+from aiogram.types import CallbackQuery
 from sqlalchemy import select
 
+from app.database.expense import Expense
+from app.database.functions import get_item_category_map
+from app.database.interaction_db import add_new_data
+from app.database.models import CatTable, DictTable
+from app.database.my_queue import UserQueue, no_subs
+from app.lexicon.lexicon import LEXICON_KEYS
 from app.ml.categorizer import categorizer
+from app.services.fuzzy_wuzzy import fuzzy_root
 
 
 def make_item_price(note: str) -> tuple[str, float]:
     """Парсит строку на товар и цену. Возвращает (название, цена)."""
-    # Паттерны для "товар цена" и "цена товар"
     pattern_1 = r"(^.+)\s(\d+[\.|,]?\d*)$"
     pattern_2 = r"(^\d+[\.|,]?\d*)\s(.+)$"
 
@@ -32,17 +29,10 @@ def make_item_price(note: str) -> tuple[str, float]:
         else:
             return note.strip(), 0.0
 
-        # Заменяем запятую на точку и приводим к float
         price = float(price_str.replace(",", "."))
         return name.strip(), price
     except (ValueError, TypeError):
         return note.strip(), 0.0
-
-
-# def get_category_id_by_name(session: Session, name: str) -> int | None:
-#     """Вспомогательная функция для получения ID категории по имени товара."""
-#     query = select(DictTable.id).where(DictTable.name == name.strip().lower())
-#     return session.execute(query).scalar_one_or_none()
 
 
 async def get_category(session, item: str) -> str | None:
@@ -50,7 +40,7 @@ async def get_category(session, item: str) -> str | None:
     clean_item = item.strip().lower()
     query = (
         select(CatTable.cat)
-        .join(DictTable)  # связь по ForeignKey DictTable.cat_id
+        .join(DictTable)
         .where(DictTable.item == clean_item)
         .limit(1)
     )
@@ -70,12 +60,16 @@ async def process_msg_to_expenses(
 
     for line in filter(None, map(str.strip, raw_messages.splitlines())):
         item_name, price = make_item_price(line)
-        result = categorizer.predict(item_name)
-        print(result)
+
+        ml_result = categorizer.predict(item_name)
+        item_to_category = await get_item_category_map(session)
+        guess = await fuzzy_root(item_name, item_to_category)
+        print("ml_result: ", ml_result)
+        print("fuzzy: ", guess)
+
         category_name = await get_category(session, item_name)
 
         if category_name:
-            # Уже знаем категорию: сразу сохраняем
             expense = Expense(
                 raw=line,
                 user_id=user_id,
@@ -86,10 +80,8 @@ async def process_msg_to_expenses(
             )
 
             await add_new_data(session, expense)
-            # spend(user_id, expense.price)
             results.append(category_name)
         else:
-            # Категория пока неизвестна: в БД НЕ пишем, только ставим в очередь
             no_subs.queue(user_id, (item_name, price, line))
 
     return ", ".join(results) or None
@@ -99,12 +91,10 @@ def form_expense_instance(
     no_subs: UserQueue, callback: CallbackQuery
 ) -> Expense | None:
     user_id = callback.from_user.id
-
-    # Ищем значение в "плоском" словаре LEXICON_KEYS
     category_name = LEXICON_KEYS.get(callback.data)
 
     if not category_name:
-        return None  # Если это была кнопка группы, а не категория
+        return None
 
     pending_item = no_subs.peek(user_id)
     if not pending_item:
@@ -118,5 +108,5 @@ def form_expense_instance(
         item=name,
         category=category_name,
         price=price,
-        flag=True,  # Чтобы закрепить категорию за товаром в БД
+        flag=True,
     )
