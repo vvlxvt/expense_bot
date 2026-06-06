@@ -25,6 +25,7 @@ __all__ = (
     "get_three_month_avg",
     "get_all_categories",
     "get_items_with_categories",
+    "get_item_category_map",
 )
 
 from .my_queue import no_subs, UserQueue
@@ -46,4 +47,5 @@ from .functions import (
     get_three_month_avg,
     get_all_categories,
     get_items_with_categories,
+    get_item_category_map,
 )

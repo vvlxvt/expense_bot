@@ -1,15 +1,12 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 
-from app.services import (
-    add_new_data,
-    form_expense_instance,
-    process_msg_to_expenses,
-)
+from app.services.notes_handling import form_expense_instance, process_msg_to_expenses
 
 from app.keyboards import add_subname_kb
 from app.lexicon import *
 from app.database import no_subs, DB_Manager
+from app.database.interaction_db import add_new_data
 from app.filters import IsAdmin
 from app import config
 

@@ -1,0 +1,4 @@
+-r requirements.txt
+
+flake8>=6.0.0,<7
+mypy>=1.4.0,<2

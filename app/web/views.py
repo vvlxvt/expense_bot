@@ -1,6 +1,5 @@
 import json
 from datetime import datetime
-from calendar import month_abbr
 import aiohttp_jinja2
 from aiohttp import web
 from app.database import (

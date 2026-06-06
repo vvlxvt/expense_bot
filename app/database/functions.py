@@ -1,12 +1,12 @@
 from sqlalchemy import select, func, Float
 from .models import DictTable, MainTable, CatTable, UserTable
 from datetime import datetime, timedelta, date, time
-from app.services.aux_functions import (
+from app.utils.date_ranges import (
     get_month_range,
     get_week_range,
     get_previous_n_month_ranges,
 )
-from app.database import refund
+from .interaction_db import refund
 
 
 async def get_cumulative_data(session, category: str, month: str):
@@ -99,6 +99,18 @@ async def get_items_with_categories(session) -> list[tuple[str, int]]:
     )
     result = await session.execute(stmt)
     return result.all()  # список (item, cat_id)
+
+
+async def get_item_category_map(session) -> dict[str, str]:
+    """Словарь item -> category для fuzzy-поиска по известным товарам."""
+    stmt = (
+        select(DictTable.item, CatTable.cat)
+        .join(CatTable, DictTable.cat_id == CatTable.id)
+        .where(DictTable.cat_id.isnot(None))
+        .order_by(DictTable.id)
+    )
+    result = await session.execute(stmt)
+    return {item: category for item, category in result.all()}
 
 
 def format_output(res: list[tuple], width: int = 15) -> list[str]:

@@ -4,8 +4,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-from app.ml import categorizer
-from app.database import DB_Manager, get_items_with_categories
+from app.ml.categorizer import categorizer
+from app.database.db_manager import DB_Manager
+from app.database.functions import get_items_with_categories
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -29,5 +30,5 @@ async def retrain_model(db: DB_Manager):
 
     joblib.dump({"model": model, "exact": exact_dict}, MODEL_PATH)
 
-    categorizer.categorizer.reload()
+    categorizer.reload()
     print(f"✅ Модель переобучена на {len(df)} записях")
