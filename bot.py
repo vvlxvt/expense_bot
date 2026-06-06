@@ -3,6 +3,7 @@ import logging
 import sys
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from aiohttp import web
 import aiohttp_jinja2, jinja2
 from app import config
@@ -47,7 +48,7 @@ def main():
     db = DB_Manager(url=conf.db_url, echo=False)
 
     # 2. Настройка бота
-    bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
+    bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher()
 
     # Передаем db в Dispatcher, чтобы он был доступен во всех хендлерах
