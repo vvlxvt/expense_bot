@@ -1,14 +1,20 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from sqlalchemy import select
 
 from app.services.notes_handling import form_expense_instance, process_msg_to_expenses
 
-from app.keyboards import add_subname_kb
+from app.keyboards import add_subname_kb, category_choice_kb
 from app.lexicon import *
 from app.database import no_subs, DB_Manager
+from app.database.expense import Expense
+from app.database.functions import get_item_category_map
 from app.database.interaction_db import add_new_data
+from app.database.models import CatTable
 from app.filters import IsAdmin
 from app import config
+from app.ml.categorizer import categorizer
+from app.services.fuzzy_wuzzy import fuzzy_root
 
 # -------------------------------------------------
 # CONFIG & ROUTER
@@ -46,14 +52,56 @@ async def ask_next_item(message: Message, user_id: int, *, edit: bool = False):
     await method(text, reply_markup=reply_markup)
 
 
-async def proceed_to_next(callback: CallbackQuery):
+async def get_choice_categories(db: DB_Manager, item_name: str) -> dict[str, str | None]:
+
+    """
+    Предлагает категории пресказанные нейросетью(переобучается автоматически) или с помощью размытого поиска(rapidfuzzy)
+    """
+    ml_category = None
+    fuzzy_category = None
+
+    async with db.get_session() as session:
+        ml_result = categorizer.predict(item_name)
+        if ml_result.get("cat_id"):
+            ml_category = await session.scalar(
+                select(CatTable.cat).where(CatTable.id == ml_result["cat_id"])
+            )
+
+        item_to_category = await get_item_category_map(session)
+        guess = await fuzzy_root(item_name, item_to_category)
+        if guess:
+            fuzzy_category = guess["category"]
+
+    return {"ml": ml_category, "fuzzy": fuzzy_category}
+
+
+async def ask_choice(
+    message: Message, user_id: int, db: DB_Manager, *, edit: bool = False
+):
+
+    item = no_subs.peek(user_id)
+
+    if not item:
+        return await message.answer("✅ Все траты обработаны!")
+
+    item_name = item[0]
+    categories = await get_choice_categories(db, item_name)
+
+    text = f"Выбери категорию для товара: <b>{item[2]}</b>"
+    reply_markup = category_choice_kb(categories["ml"], categories["fuzzy"])
+
+    method = message.edit_text if edit else message.answer
+    await method(text, reply_markup=reply_markup)
+
+
+async def proceed_to_next(callback: CallbackQuery, db: DB_Manager):
     """
     Унифицированный переход к следующему элементу очереди.
     """
     user_id = get_user_id(callback)
 
     if not no_subs.is_empty(user_id):
-        await ask_next_item(callback.message, user_id, edit=True)
+        await ask_choice(callback.message, user_id, db, edit=True)
 
 
 # -------------------------------------------------
@@ -71,7 +119,7 @@ async def add_note(message: Message, db: DB_Manager):
         await message.answer(f"Добавлено в: <b>{categories}</b>")
 
     if not no_subs.is_empty(user_id):
-        await ask_next_item(message, user_id)
+        await ask_choice(message, user_id, db)
 
 
 @router.message()
@@ -88,7 +136,7 @@ async def ignore_others(message: Message):
 
 
 @router.callback_query(F.data == "cancel")
-async def cancel_expense(callback: CallbackQuery):
+async def cancel_expense(callback: CallbackQuery, db: DB_Manager):
     user_id = get_user_id(callback)
 
     skipped = no_subs.dequeue(user_id)
@@ -97,10 +145,10 @@ async def cancel_expense(callback: CallbackQuery):
     await callback.message.answer(f"❌ Отменено для: <b>{skipped_name}</b>")
     await callback.answer()
 
-    await proceed_to_next(callback)
+    await proceed_to_next(callback, db)
 
 
-@router.callback_query(F.data == "correct")
+@router.callback_query(F.data.in_({"correct", "manual_category"}))
 async def back_to_main_menu(callback: CallbackQuery):
     await ask_next_item(callback.message, get_user_id(callback), edit=True)
     await callback.answer()
@@ -150,7 +198,42 @@ async def category_select(callback: CallbackQuery, db: DB_Manager):
     await callback.message.answer(f"Сохранено: {expense.category}")
     await callback.answer()
 
-    await proceed_to_next(callback)
+    await proceed_to_next(callback, db)
+
+
+@router.callback_query(F.data.in_({"choice:ml", "choice:fuzzy"}))
+async def suggested_category_select(callback: CallbackQuery, db: DB_Manager):
+    user_id = get_user_id(callback)
+    item = no_subs.peek(user_id)
+
+    if not item:
+        return await callback.answer("Нет данных", show_alert=True)
+
+    source = callback.data.split(":", 1)[1]
+    categories = await get_choice_categories(db, item[0])
+    category_name = categories.get(source)
+
+    if not category_name:
+        return await callback.answer("Не получилось определить категорию", show_alert=True)
+
+    name, price, raw_message = item
+    expense = Expense(
+        raw=raw_message,
+        user_id=user_id,
+        item=name,
+        category=category_name,
+        price=price,
+        flag=True,
+    )
+
+    async with db.get_session() as session:
+        await add_new_data(session, expense)
+    no_subs.dequeue(user_id)
+
+    await callback.message.answer(f"Сохранено: {expense.category}")
+    await callback.answer()
+
+    await proceed_to_next(callback, db)
 
 
 # -------------------------------------------------

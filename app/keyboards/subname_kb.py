@@ -14,6 +14,36 @@ def add_subname_kb(**kwargs: dict[str, str]) -> InlineKeyboardMarkup:
     return kb_builder.as_markup()
 
 
+def category_choice_kb(
+    ml_category: str | None,
+    fuzzy_category: str | None,
+) -> InlineKeyboardMarkup:
+    kb_builder = InlineKeyboardBuilder()
+
+    if ml_category:
+        kb_builder.row(
+            InlineKeyboardButton(
+                text=f"ML: {ml_category}",
+                callback_data="choice:ml",
+            )
+        )
+
+    if fuzzy_category:
+        kb_builder.row(
+            InlineKeyboardButton(
+                text=f"Fuzzy: {fuzzy_category}",
+                callback_data="choice:fuzzy",
+            )
+        )
+
+    kb_builder.row(
+        InlineKeyboardButton(text="Выбрать вручную", callback_data="manual_category")
+    )
+    kb_builder.row(InlineKeyboardButton(text="ОТМЕНИТЬ", callback_data="cancel"))
+
+    return kb_builder.as_markup()
+
+
 def another_kb(**kwargs: dict[str, str]) -> InlineKeyboardMarkup:
     kb_builder = InlineKeyboardBuilder()
     buttons: list[InlineKeyboardButton] = []
