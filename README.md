@@ -1,98 +1,250 @@
 # ExpenseBot
 
-A Telegram expense tracking bot with a lightweight web dashboard for charts. The bot accepts free-form messages like "coffee 250", categorizes the expense, stores it, and provides quick summaries in chat plus a charts page at `/stats`.
+ExpenseBot is a Telegram bot for tracking personal expenses. It accepts free-form expense messages, stores them in a database, updates the user's balance, suggests categories for unknown items, and exposes a small web dashboard with charts.
+
+The bot understands messages such as `coffee 12.50` or `12.50 coffee`. Known items are categorized automatically. Unknown items are queued and shown back to the user with category suggestions from both an ML classifier and fuzzy matching, plus a manual category picker.
 
 ## Features
-- **Admin-gated access**: Only Telegram users listed in `ADMIN_IDS` can interact with the bot.
-- **Natural input**: Send messages like `coffee 250` to record expenses.
-- **Auto-categorization**: Suggests/assigns subcategories for new items and prompts when ambiguous.
-- **Inline keyboards**: Pagination for long outputs and quick subcategory assignment.
-- **Quick summaries**:
-  - `/today` — today’s spendings
-  - `/week` — weekly spendings
-  - `/month` — monthly spendings
-  - `/my_month` — spendings since the start of the month
-  - `/del_last_note` — delete the last record
-  - `/charts` — opens charts dashboard link
-- **Charts dashboard**: `/stats` shows cumulative daily spend, selectable category/month, and a 3‑month average. Serves static files from `app/static` and templates from `app/templates`.
-- **Daily timer job**: Background task launched on startup for scheduled work.
+
+- Admin-only access through Telegram IDs listed in `ADMIN_IDS`.
+- Free-form expense input, including multiple lines in one message.
+- Automatic category assignment for known items.
+- Category suggestions for unknown items:
+  - `predict()` uses a TF-IDF + Logistic Regression classifier.
+  - `fuzzy_root()` uses RapidFuzz to find similar known items.
+  - Manual fallback through inline category buttons.
+- Chosen categories are saved back into the item dictionary.
+- User balance tracking with deposits and spending deductions.
+- Daily, weekly, and monthly summaries in chat.
+- Pagination for long expense lists.
+- Web dashboard at `/stats` with category and month filters.
+- ML model retraining on application startup.
+- Background daily timer task.
+
+## Expense Flow
+
+1. The user sends one or more expense lines:
+   ```text
+   milk 4.80
+   bread 2.50
+   ```
+2. Each line is parsed into an item name and a price.
+3. If the item exists in the dictionary, the expense is saved immediately with its known category.
+4. If the item is unknown, it is added to the `no_subs` queue.
+5. For the queued item, the bot displays inline buttons:
+   - the ML category guess;
+   - the fuzzy-match category guess;
+   - `Выбрать вручную` for manual selection;
+   - `ОТМЕНИТЬ` to skip the item.
+6. Once the user chooses a suggested or manual category, the expense is saved and the item dictionary is updated.
+
+## Bot Commands
+
+| Command | Description |
+| --- | --- |
+| `/start` | Sends the welcome message |
+| `/help` | Shows the expected input format |
+| `/deposit <amount>` | Adds money to the user's balance |
+| `/balance` | Shows the current balance |
+| `/today` | Shows today's spending |
+| `/week` | Shows current-week spending grouped by category |
+| `/month` | Opens month selection for monthly statistics |
+| `/my_month` | Shows paginated expenses since the start of the current month |
+| `/del_last_note` | Deletes the latest expense record |
+| `/charts` | Sends a link to the web charts page |
 
 ## Tech Stack
-- **Python**, **Aiogram** (Telegram bot, webhook mode)
-- **Aiohttp** + **aiohttp_jinja2/Jinja2** (web server + templating)
-- Simple database access layer (see `app/database/*`)
 
-## Project Structure (high-level)
-- `bot.py` — entrypoint; configures webhook, aiohttp app, routes `/stats`, and starts server
-- `app/handlers/*` — bot routers and message/callback handlers
-- `app/lexicon/*` — texts, commands, labels
-- `app/keyboards/*` — inline keyboards and menu commands
-- `app/services/*` — services, background jobs, helpers
-- `app/database/*` — data access functions
-- `app/templates`, `app/static` — web UI assets for the charts page
-- `app/config/config.py` — env config loader and small globals helper
-
-## Requirements
 - Python 3.11+
-- A Telegram Bot token (from @BotFather)
-- Public HTTPS endpoint for webhooks (e.g., ngrok, Cloudflare Tunnel, Fly.io, etc.)
+- Aiogram 3
+- Aiohttp
+- aiohttp-jinja2 / Jinja2
+- SQLAlchemy 2 async
+- SQLite through `aiosqlite`
+- Alembic
+- scikit-learn
+- pandas / numpy
+- joblib
+- RapidFuzz
+
+## Installation
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+```
+
+On Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Configuration
-Create a `.env` file in the project root with at least:
 
-```
+Create a `.env` file in the project root:
+
+```env
 BOT_TOKEN=<telegram-bot-token>
-ADMIN_IDS=<comma-separated-admin-user-ids>
+ADMIN_IDS=123456789,987654321
 APP_ENV=development
-BASE_WEBHOOK_URL=https://<your-public-host>
+BASE_WEBHOOK_URL=https://<public-https-host>
 DB_PATH=data/real.db
 ```
 
-Notes:
-- `ADMIN_IDS` must be numeric Telegram user IDs, e.g.: `ADMIN_IDS=12345678,87654321`.
-- `BASE_WEBHOOK_URL` must be publicly reachable over HTTPS; the bot sets a webhook to `${BASE_WEBHOOK_URL}/bot<token>`.
-- `DB_PATH` is a local path to the SQLite (or similar) DB used by the app’s data layer.
+Environment variables:
 
-## Installation
-1. Create and activate a virtual environment (recommended).
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+- `BOT_TOKEN` is the Telegram bot token from BotFather.
+- `ADMIN_IDS` is a comma-separated list of allowed Telegram user IDs.
+- `APP_ENV` is the environment name, for example `development` or `production`.
+- `BASE_WEBHOOK_URL` is the public HTTPS URL used by Telegram webhooks.
+- `DB_PATH` is the database file path.
 
-## How to Run (Webhook mode)
-The app runs an aiohttp server and registers a Telegram webhook on startup.
+The SQLAlchemy URL is built as:
 
-1. Ensure your tunnel or hosting exposes an HTTPS URL and forwards to your local server.
-2. Set the `.env` values (especially `BOT_TOKEN`, `ADMIN_IDS`, `BASE_WEBHOOK_URL`).
-3. Start the app:
-   ```bash
-   python bot.py
-   ```
-4. You should see logs like:
-   - `✅ Webhook set for <APP_ENV> environment`
-   - `🚀 Running in <APP_ENV> mode`
-5. In Telegram, open your bot and use `/start`.
+```text
+sqlite+aiosqlite:///<DB_PATH>
+```
 
-Default server config (see `bot.py`):
-- Host: `0.0.0.0`
-- Port: `80`
-- Webhook path: `/bot<token>`
-- Charts page: `/stats`
+## Running
 
-If port 80 is unavailable on your system, change the port in `bot.py` (`WEB_SERVER_PORT`) and update your tunnel/forwarding accordingly.
+The application runs in webhook mode and starts an aiohttp server:
 
-## Development Tips
-- You can open the charts dashboard directly at: `https://<BASE_WEBHOOK_URL>/stats` (with query params like `?category=Уля&month=Oct`).
-- Static files are served at `/static/`.
-- The bot’s menu commands are configured from `LEXICON_COMMANDS`.
-- Handlers are split into `user_handlers.py` and `other_handlers.py` and gated by the `IsAdmin` filter.
+```bash
+python bot.py
+```
 
-## Notes & Troubleshooting
-- If the webhook fails to register, verify:
-  - `BASE_WEBHOOK_URL` is publicly reachable over HTTPS
-  - Your tunnel/hosting forwards to the correct local host/port
-  - `BOT_TOKEN` is valid and not revoked by @BotFather
-- Only users listed in `ADMIN_IDS` can interact with the bot; others will be ignored by handlers.
-- Ensure your locale/timezone are correct if daily stats appear shifted.
+On startup, the app:
 
+1. Creates `DB_Manager`.
+2. Registers the webhook at `${BASE_WEBHOOK_URL}/bot<BOT_TOKEN>`.
+3. Configures the bot command menu.
+4. Starts `daily_timer()`.
+5. Starts ML model retraining.
+6. Starts the web server.
+
+Default server values:
+
+| Setting | Value |
+| --- | --- |
+| Host | `0.0.0.0` |
+| Port | `80` |
+| Webhook path | `/bot<BOT_TOKEN>` |
+| Charts page | `/stats` |
+| Static files | `/static/` |
+
+For local development, expose the local server through a public HTTPS tunnel such as ngrok, Cloudflare Tunnel, or a similar tool.
+
+## Web Dashboard
+
+The statistics page is available at:
+
+```text
+https://<BASE_WEBHOOK_URL>/stats
+```
+
+It uses:
+
+- templates from `app/templates`;
+- static files from `app/static`;
+- database query helpers from `app/database/functions.py`.
+
+## Project Structure
+
+```text
+expensebot/
+├── bot.py
+├── app/
+│   ├── config/
+│   ├── database/
+│   ├── filters/
+│   ├── handlers/
+│   ├── keyboards/
+│   ├── lexicon/
+│   ├── ml/
+│   ├── services/
+│   ├── static/
+│   ├── templates/
+│   ├── utils/
+│   └── web/
+├── alembic/
+├── data/
+├── requirements.txt
+└── README.md
+```
+
+Important files:
+
+- `bot.py` is the entrypoint for the webhook, aiohttp app, and web routes.
+- `app/handlers/user_handlers.py` contains user commands, reports, balance actions, and pagination callbacks.
+- `app/handlers/other_handlers.py` handles free-form expense messages and category selection.
+- `app/services/notes_handling.py` parses expense text and queues unknown items.
+- `app/services/fuzzy_wuzzy.py` resolves fuzzy category suggestions from known items.
+- `app/ml/categorizer.py` loads the trained model and predicts category IDs.
+- `app/ml/ml_model.py` retrains the model from labeled dictionary items.
+- `app/database/interaction_db.py` saves expenses and updates the item dictionary.
+- `app/lexicon/lexicon.py` defines command labels, button labels, and category mappings.
+
+## Categories
+
+Category labels and callback keys live in `app/lexicon/lexicon.py`.
+
+Top-level manual choices:
+
+- `зефир`
+- `Уля`
+- `животные`
+- `аптека`
+- `основные продукты`
+- `неосновные продукты`
+- `крупные покупки`
+
+The `основные продукты` and `неосновные продукты` buttons open their own subcategory menus.
+
+## ML and Fuzzy Suggestions
+
+The model file is stored at:
+
+```text
+app/ml/model.pkl
+```
+
+On startup, `retrain_model()` loads labeled items from the database, trains the classifier, and stores:
+
+- `model`: a `TfidfVectorizer + LogisticRegression` pipeline;
+- `exact`: an exact-match dictionary of `item -> cat_id`.
+
+When choosing a category for a new item:
+
+- the ML classifier returns a `cat_id`, which is resolved to a category name from the `categories` table;
+- fuzzy matching compares the item name with already known items and returns the category of the closest match;
+- when the user chooses one of the suggestions, the expense is saved and the item becomes known for future automatic categorization.
+
+## Development
+
+Useful syntax check:
+
+```bash
+python -m compileall app
+```
+
+If Git complains about repository ownership in a sandboxed environment, use:
+
+```bash
+git -c safe.directory=C:/Users/vital/PycharmProjects/expensebot status --short
+```
+
+## Troubleshooting
+
+- Webhook registration fails: check `BOT_TOKEN`, `BASE_WEBHOOK_URL`, and public HTTPS availability.
+- The bot ignores messages: make sure your Telegram user ID is listed in `ADMIN_IDS`.
+- `/stats` does not open: check that the app is running and the tunnel points to the configured port.
+- The model does not suggest useful categories: make sure the database contains labeled items and `app/ml/model.pkl` is writable.
+- Port `80` is already in use: change `WEB_SERVER_PORT` in `bot.py` and update the tunnel forwarding target.
