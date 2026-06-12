@@ -41,10 +41,12 @@ router.message.filter(IsAdmin(_conf.tg_bot.admin_ids))
 # HELPERS
 # -----------------------------
 def get_user_id(event: Message | CallbackQuery) -> int:
+    """Return the Telegram user ID from a message or callback event."""
     return event.from_user.id
 
 
 async def send_page(user_id: int, message: Message, state: FSMContext):
+    """Send the current paginated expense page for a user."""
     data = await state.get_data()
     page = data.get("page", 0)
     user_pages = books.get(user_id, [])
@@ -72,11 +74,13 @@ async def send_page(user_id: int, message: Message, state: FSMContext):
 # -----------------------------
 @router.message(CommandStart())
 async def start(message: Message):
+    """Handle /start and send the welcome message."""
     await message.answer(LEXICON["/start"])
 
 
 @router.message(Command("help"))
 async def help_command(message: Message):
+    """Handle /help and show the basic input hint."""
     await message.answer(LEXICON["/help"])
 
 
@@ -87,6 +91,7 @@ async def help_command(message: Message):
 
 @router.message(Command("deposit"))
 async def add_deposit(message: Message, db: DB_Manager):
+    """Handle /deposit and add the requested amount to the user's balance."""
     try:
         # Разбиваем текст команды, чтобы достать число
         parts = message.text.split()
@@ -107,6 +112,7 @@ async def add_deposit(message: Message, db: DB_Manager):
 
 @router.message(Command("balance"))
 async def balance(message: Message, db: DB_Manager):
+    """Handle /balance and display the user's current balance."""
     user_id = message.from_user.id
     async with db.get_session() as session:
         current_balance = await get_balance(session, user_id)
@@ -120,6 +126,7 @@ async def balance(message: Message, db: DB_Manager):
 
 @router.message(Command("charts"))
 async def charts(message: Message):
+    """Handle /charts and send a link to the web dashboard."""
     keyboard = one_button_kb("Открыть график", _CHARTS_URL)
     await message.answer("Перейдите по ссылке:", reply_markup=keyboard)
 
@@ -129,6 +136,7 @@ async def charts(message: Message):
 # -----------------------------
 @router.message(Command("today"))
 async def today(message: Message, db: DB_Manager):
+    """Handle /today and show today's total spending."""
     user_id = get_user_id(message)
     async with db.get_session() as session:
         total = await spend_today(session, user_id)
@@ -138,6 +146,7 @@ async def today(message: Message, db: DB_Manager):
 
 @router.message(Command("week"))
 async def week(message: Message, db: DB_Manager):
+    """Handle /week and show current-week category totals and total spend."""
     user_id = get_user_id(message)
     async with db.get_session() as session:
         res = await get_stat_week(session, user_id)
@@ -148,6 +157,7 @@ async def week(message: Message, db: DB_Manager):
 
 @router.message(Command("month"))
 async def choose_month(message: Message):
+    """Handle /month and display the month selection keyboard."""
     await message.answer(
         "За какой месяц показать статистику?",
         reply_markup=add_subname_kb(**LEXICON_MONTH),
@@ -156,6 +166,7 @@ async def choose_month(message: Message):
 
 @router.message(Command("my_month"))
 async def send_book(message: Message, state: FSMContext, db: DB_Manager):
+    """Handle /my_month and send paginated current-month expenses."""
     user_id = get_user_id(message)
     async with db.get_session() as session:
         result = await get_my_expenses(session, user_id)
@@ -171,6 +182,7 @@ async def send_book(message: Message, state: FSMContext, db: DB_Manager):
 
 @router.message(Command("tanya"))
 async def send_book(message: Message, state: FSMContext, db: DB_Manager):
+    """Handle /tanya and show paginated expenses for the configured user."""
     user_id = 1194999116
     async with db.get_session() as session:
         result = await get_my_expenses(session, user_id)
@@ -186,6 +198,7 @@ async def send_book(message: Message, state: FSMContext, db: DB_Manager):
 
 @router.message(Command("del_last_note"))
 async def delete_last(message: Message, db: DB_Manager):
+    """Handle /del_last_note and delete the user's latest expense."""
     user_id = get_user_id(message)
     async with db.get_session() as session:
         last = await del_last_note(session, user_id)
@@ -197,6 +210,7 @@ async def delete_last(message: Message, db: DB_Manager):
 # -----------------------------
 @router.callback_query(F.data.in_({"prev", "next", "close", "group"}))
 async def book_handler(callback: CallbackQuery, state: FSMContext, db: DB_Manager):
+    """Handle pagination, grouping, and closing for monthly expense pages."""
     user_id = get_user_id(callback)
     current_state = await state.get_state()
     data = await state.get_data()
@@ -267,6 +281,7 @@ async def book_handler(callback: CallbackQuery, state: FSMContext, db: DB_Manage
 # -----------------------------
 @router.callback_query(F.data.in_(LEXICON_MONTH.keys()))
 async def choose_month_callback(callback: CallbackQuery, db: DB_Manager):
+    """Handle month selection and show monthly category statistics."""
     user_id = get_user_id(callback)
     month = callback.data
     async with db.get_session() as session:
@@ -284,6 +299,7 @@ async def choose_month_callback(callback: CallbackQuery, db: DB_Manager):
 
 @router.callback_query(F.data == "_another")
 async def show_another(callback: CallbackQuery, db: DB_Manager):
+    """Show detailed rows for the miscellaneous category in the selected month."""
     user_id = get_user_id(callback)
     month = callback.message.text
     async with db.get_session() as session:
@@ -298,5 +314,6 @@ async def show_another(callback: CallbackQuery, db: DB_Manager):
 
 @router.callback_query(F.data == "_cancel")
 async def cancel(callback: CallbackQuery):
+    """Cancel the optional miscellaneous-category details prompt."""
     await callback.message.edit_text("Отмена")
     await callback.message.delete_reply_markup()

@@ -16,4 +16,5 @@ class Expense:
     flag: bool = False
 
     def __repr__(self):
+        """Return a compact debug representation of an expense."""
         return f"Expense(item={self.item}, price={self.price}, category={self.category}, flag={self.flag})"

@@ -27,6 +27,7 @@ WEB_SERVER_PORT = 80
 
 
 async def handle_retrain(db):
+    """Retrain the category model in the background and log startup failures."""
     try:
         await retrain_model(db)
     except Exception as e:
@@ -34,6 +35,7 @@ async def handle_retrain(db):
 
 
 async def on_startup(bot: Bot, db: DB_Manager):
+    """Register webhook, configure commands, and start background startup tasks."""
     await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}")
     await set_main_menu(bot)
     asyncio.create_task(daily_timer())
@@ -42,6 +44,7 @@ async def on_startup(bot: Bot, db: DB_Manager):
 
 
 def main():
+    """Build the bot dispatcher and aiohttp application, then run the server."""
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 
     # 1. Инициализация базы (уже на месте)

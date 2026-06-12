@@ -5,10 +5,10 @@ from rapidfuzz import process, fuzz
 
 async def fuzzy_root(item: str, item_to_category: dict[str, str]) -> dict | None:
     """
-    Ищет категорию по fuzzy-совпадению с известными товарами из словаря.
+    Find a likely category by fuzzy-matching an item against known items.
 
-    :param item: название товара из сообщения пользователя
-    :param item_to_category: словарь {item: category}
+    :param item: Item name from the user's message.
+    :param item_to_category: Mapping of known item names to category names.
     """
     if not item_to_category:
         return None

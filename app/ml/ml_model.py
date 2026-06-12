@@ -14,6 +14,7 @@ MODEL_PATH = BASE_DIR / "model.pkl"
 
 
 async def retrain_model(db: DB_Manager):
+    """Train the category model from labeled dictionary items and reload it."""
     async with db.get_session() as session:
         rows = await get_items_with_categories(session)
     if not rows:

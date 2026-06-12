@@ -7,6 +7,7 @@ from .models import DictTable, MainTable, CatTable, UserTable
 async def get_or_create_item_id(
     session: AsyncSession, item_name: str, category_name: str = None
 ) -> int:
+    """Return an item ID, creating or updating its category when needed."""
     clean_item = item_name.strip().lower()
 
     # 1. Пытаемся найти товар
@@ -70,7 +71,7 @@ async def get_or_create_item_id(
 
 async def top_up(session: AsyncSession, user_id, amount):
     """
-    пополнить баланс
+    Add money to a user's balance.
     """
     await session.execute(
         update(UserTable)
@@ -82,6 +83,7 @@ async def top_up(session: AsyncSession, user_id, amount):
 
 # функции списания с баланса
 async def spend(session: AsyncSession, user_id: int, amount: float) -> float:
+    """Subtract an amount from a user's balance and return the new balance."""
     stmt = select(UserTable).where(UserTable.telegram_id == user_id)
     user = await session.scalar(stmt)
 
@@ -93,6 +95,7 @@ async def spend(session: AsyncSession, user_id: int, amount: float) -> float:
 
 
 async def refund(session: AsyncSession, user_id: int, amount: float):
+    """Add an amount back to a user's balance."""
     user = await session.scalar(
         select(UserTable).where(UserTable.telegram_id == user_id)
     )
@@ -102,6 +105,7 @@ async def refund(session: AsyncSession, user_id: int, amount: float):
 
 
 async def get_balance(session: AsyncSession, user_id: int):
+    """Return the user's current rounded balance."""
     result = await session.scalar(
         select(UserTable.deposit).where(UserTable.telegram_id == user_id)
     )
@@ -109,6 +113,7 @@ async def get_balance(session: AsyncSession, user_id: int):
 
 
 async def add_new_data(session: AsyncSession, instance: Expense):
+    """Persist an expense record and update the user's balance."""
     try:
         # 1. Добавляем await везде!
         item_id = await get_or_create_item_id(

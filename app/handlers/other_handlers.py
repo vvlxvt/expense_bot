@@ -32,12 +32,13 @@ router.message.filter(IsAdmin(_conf.tg_bot.admin_ids))
 
 
 def get_user_id(event: Message | CallbackQuery) -> int:
+    """Return the Telegram user ID from a message or callback event."""
     return event.from_user.id
 
 
 async def ask_next_item(message: Message, user_id: int, *, edit: bool = False):
     """
-    Показывает следующий товар без категории.
+    Show the manual category picker for the next uncategorized item.
     """
 
     item = no_subs.peek(user_id)
@@ -55,7 +56,7 @@ async def ask_next_item(message: Message, user_id: int, *, edit: bool = False):
 async def get_choice_categories(db: DB_Manager, item_name: str) -> dict[str, str | None]:
 
     """
-    Предлагает категории пресказанные нейросетью(переобучается автоматически) или с помощью размытого поиска(rapidfuzzy)
+    Return ML and fuzzy category suggestions for an item name.
     """
     ml_category = None
     fuzzy_category = None
@@ -78,6 +79,7 @@ async def get_choice_categories(db: DB_Manager, item_name: str) -> dict[str, str
 async def ask_choice(
     message: Message, user_id: int, db: DB_Manager, *, edit: bool = False
 ):
+    """Show category suggestion buttons for the next queued item."""
 
     item = no_subs.peek(user_id)
 
@@ -96,7 +98,7 @@ async def ask_choice(
 
 async def proceed_to_next(callback: CallbackQuery, db: DB_Manager):
     """
-    Унифицированный переход к следующему элементу очереди.
+    Move the conversation to the next pending uncategorized item.
     """
     user_id = get_user_id(callback)
 
@@ -111,6 +113,7 @@ async def proceed_to_next(callback: CallbackQuery, db: DB_Manager):
 
 @router.message(F.text)
 async def add_note(message: Message, db: DB_Manager):
+    """Handle free-form expense text and start categorization when needed."""
     user_id = get_user_id(message)
     async with db.get_session() as session:
         categories = await process_msg_to_expenses(session, message.text, user_id)
@@ -125,7 +128,7 @@ async def add_note(message: Message, db: DB_Manager):
 @router.message()
 async def ignore_others(message: Message):
     """
-    Игнорируем остальные сообщения.
+    Ignore non-text messages.
     """
     pass
 
@@ -137,6 +140,7 @@ async def ignore_others(message: Message):
 
 @router.callback_query(F.data == "cancel")
 async def cancel_expense(callback: CallbackQuery, db: DB_Manager):
+    """Skip the current pending item and continue with the next one."""
     user_id = get_user_id(callback)
 
     skipped = no_subs.dequeue(user_id)
@@ -150,6 +154,7 @@ async def cancel_expense(callback: CallbackQuery, db: DB_Manager):
 
 @router.callback_query(F.data.in_({"correct", "manual_category"}))
 async def back_to_main_menu(callback: CallbackQuery):
+    """Open the manual category menu for the current pending item."""
     await ask_next_item(callback.message, get_user_id(callback), edit=True)
     await callback.answer()
 
@@ -161,6 +166,7 @@ async def back_to_main_menu(callback: CallbackQuery):
 
 @router.callback_query(F.data.in_({"food", "non_food"}))
 async def process_group_press(callback: CallbackQuery):
+    """Open a subcategory menu for food or non-food manual selection."""
     user_id = get_user_id(callback)
 
     item = no_subs.peek(user_id)
@@ -184,6 +190,7 @@ async def process_group_press(callback: CallbackQuery):
 
 @router.callback_query(F.data.in_(LEXICON_KEYS))
 async def category_select(callback: CallbackQuery, db: DB_Manager):
+    """Save the current pending item with a manually selected category."""
     user_id = get_user_id(callback)
 
     expense = form_expense_instance(no_subs, callback)
@@ -203,6 +210,7 @@ async def category_select(callback: CallbackQuery, db: DB_Manager):
 
 @router.callback_query(F.data.in_({"choice:ml", "choice:fuzzy"}))
 async def suggested_category_select(callback: CallbackQuery, db: DB_Manager):
+    """Save the current pending item with a suggested ML or fuzzy category."""
     user_id = get_user_id(callback)
     item = no_subs.peek(user_id)
 
@@ -243,5 +251,6 @@ async def suggested_category_select(callback: CallbackQuery, db: DB_Manager):
 
 @router.callback_query(F.data == "close")
 async def close_pagination(callback: CallbackQuery):
+    """Remove inline controls from the current message."""
     await callback.message.delete_reply_markup()
     await callback.answer()

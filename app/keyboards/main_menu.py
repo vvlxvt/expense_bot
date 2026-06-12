@@ -7,6 +7,7 @@ from app.lexicon.lexicon import LEXICON_COMMANDS
 
 
 async def set_main_menu(bot: Bot):
+    """Register the bot command menu from the lexicon mapping."""
     main_menu_commands = [
         BotCommand(command=command, description=description)
         for command, description in LEXICON_COMMANDS.items()

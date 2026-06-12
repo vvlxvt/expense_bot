@@ -3,7 +3,7 @@ import calendar
 
 
 def get_month_range(month: str) -> tuple:
-    """Возвращает кортеж (start_date, end_date)."""
+    """Return the start and end datetimes for a month abbreviation."""
     now = datetime.now()
     month_cap = month[:1].upper() + month[1:].lower()
 
@@ -31,7 +31,7 @@ def get_month_range(month: str) -> tuple:
 def get_previous_n_month_ranges(
     month: str, n: int
 ) -> list[tuple[datetime, datetime]]:
-    """Возвращает диапазоны предыдущих n месяцев относительно выбранного."""
+    """Return date ranges for the previous n months before the selected month."""
     now = datetime.now()
     month_cap = month[:1].upper() + month[1:].lower()
 
@@ -67,6 +67,7 @@ def get_previous_n_month_ranges(
 
 
 def get_week_range() -> tuple:
+    """Return the current week start date and current datetime."""
     current_datetime = datetime.now().replace(second=0, microsecond=0)
     start_of_week = (
         current_datetime - timedelta(days=current_datetime.weekday())

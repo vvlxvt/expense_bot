@@ -10,6 +10,7 @@ from app.database import (
 
 
 async def stats_page(request: web.Request):
+    """Render the statistics dashboard for the selected category and month."""
     category = request.query.get("category")
     month = request.query.get("month")
 

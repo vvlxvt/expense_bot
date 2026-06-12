@@ -10,6 +10,7 @@ from .interaction_db import refund
 
 
 async def get_cumulative_data(session, category: str, month: str):
+    """Return day labels and cumulative spending totals for a category/month."""
     # Предполагаем, что get_month_range возвращает объекты date или datetime
     start_date, end_date = get_month_range(month)
 
@@ -57,6 +58,7 @@ async def get_cumulative_data(session, category: str, month: str):
 
 
 async def get_three_month_avg(session, category: str, month: str) -> float:
+    """Return the average monthly spending for a category over the previous 3 months."""
     # Получаем общий диапазон за 3 месяца (от начала самого раннего до конца выбранного)
     ranges = get_previous_n_month_ranges(month, 3)
     if not ranges:
@@ -85,6 +87,7 @@ async def get_three_month_avg(session, category: str, month: str) -> float:
 
 
 async def get_all_categories(session) -> list[str]:
+    """Return all distinct category names sorted alphabetically."""
     stmt = select(CatTable.cat).distinct().order_by(CatTable.cat)
     result = await session.execute(stmt)
     # scalars() сразу превращает результат в список значений первого столбца
@@ -92,6 +95,7 @@ async def get_all_categories(session) -> list[str]:
 
 
 async def get_items_with_categories(session) -> list[tuple[str, int]]:
+    """Return known items with category IDs for ML model training."""
     stmt = (
         select(DictTable.item, DictTable.cat_id)
         .where(DictTable.cat_id.isnot(None))  # только размеченные
@@ -102,7 +106,7 @@ async def get_items_with_categories(session) -> list[tuple[str, int]]:
 
 
 async def get_item_category_map(session) -> dict[str, str]:
-    """Словарь item -> category для fuzzy-поиска по известным товарам."""
+    """Return an item-to-category mapping for fuzzy matching."""
     stmt = (
         select(DictTable.item, CatTable.cat)
         .join(CatTable, DictTable.cat_id == CatTable.id)
@@ -115,8 +119,9 @@ async def get_item_category_map(session) -> dict[str, str]:
 
 def format_output(res: list[tuple], width: int = 15) -> list[str]:
     """
-    Преобразует кортежи в строки с выравниванием второго значения столбиком.
-    :param width: расстояние от начала строки до второго столбца
+    Format tuple rows into aligned text lines for Telegram messages.
+
+    :param width: Reserved alignment width for the second value.
     """
 
     filtered = [(k, v) for k, v in res if v is not None]
@@ -131,8 +136,10 @@ def format_output(res: list[tuple], width: int = 15) -> list[str]:
 
 async def get_stat_month(session, user_id, mm: str):
     """
-    :param user_id: telegram user_id
-    :return: cumulative expenses by category for the chosen month
+    Return category totals for a user's selected month.
+
+    :param user_id: Telegram user ID.
+    :return: Formatted category totals for the chosen month.
     """
     start_date, end_date = get_month_range(mm)
     stmt = (
@@ -158,8 +165,10 @@ async def get_stat_month(session, user_id, mm: str):
 
 async def get_stat_week(session, user_id: int) -> list[tuple]:
     """
-    :param user_id: telegram user_id
-    :return: cumulative expenses by category for the current week
+    Return category totals for a user's current week.
+
+    :param user_id: Telegram user ID.
+    :return: Formatted category totals for the current week.
     """
     start_date, end_date = get_week_range()
 
@@ -186,6 +195,7 @@ async def get_stat_week(session, user_id: int) -> list[tuple]:
 
 
 async def spend_today(session, user_id) -> float:
+    """Return the user's total spending since the start of today."""
     start_date = datetime.combine(datetime.now().date(), time.min)
 
     stmt = (
@@ -202,8 +212,9 @@ async def spend_today(session, user_id) -> float:
 
 async def spend_week(session, user_id):
     """
-    :param user_id: telegram user_id
-    :return: The amount of money spent current week
+    Return the user's total spending for the current week.
+
+    :param user_id: Telegram user ID.
     """
     start_date, end_date = get_week_range()
     stmt = (
@@ -222,6 +233,7 @@ async def spend_week(session, user_id):
 
 
 async def spend_month(session, user_id, month):
+    """Return the user's total spending for the selected month."""
     start_date, end_date = get_month_range(month)
     stmt = (
         select(func.round(func.sum(MainTable.price), 2))  # Исправлено закрытие скобок
@@ -239,7 +251,7 @@ async def spend_month(session, user_id, month):
 
 async def get_my_expenses(session, user_id: int):
     """
-    получить все траты с начала месяца портянкой с пагинацией
+    Return formatted expense rows since the start of the current month.
     """
     now = datetime.now()
     start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -263,6 +275,7 @@ async def get_my_expenses(session, user_id: int):
 
 
 async def get_my_expenses_group(session, user_id):
+    """Return current-month expenses grouped by category."""
     # получить мои траты с начала месяца сгруппированными
     _month = datetime.now().month
     _year = datetime.now().year
@@ -298,6 +311,7 @@ async def get_my_expenses_group(session, user_id):
 
 
 async def get_another(session, user_id, start_date, end_date):
+    """Return detailed rows for the miscellaneous food category in a date range."""
     stmt = (
         select(DictTable.item, func.round(MainTable.price, 2).label("price"))
         .join(DictTable, MainTable.item_id == DictTable.id)
@@ -332,6 +346,7 @@ async def get_another(session, user_id, start_date, end_date):
 
 
 async def del_last_note(session, user_id: int):  # Теперь async
+    """Delete the user's latest expense, refund it, and remove orphan dictionary item."""
     try:
         last_stmt = (
             select(MainTable)

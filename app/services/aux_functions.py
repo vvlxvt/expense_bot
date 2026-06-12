@@ -2,6 +2,7 @@ import asyncio
 
 
 async def daily_timer():
+    """Clear paginated in-memory books every day at local midnight."""
     while True:
         now = datetime.now()
         next_run = datetime(now.year, now.month, now.day) + timedelta(days=1)
@@ -27,6 +28,7 @@ books: dict[int, dict[int, str]] = defaultdict(dict)
 
 
 def _get_part_text(expenses_out: list[tuple], start: int, page_size: int) -> str:
+    """Format one page of expense rows for Telegram output."""
     part = expenses_out[start : start + page_size]
 
     lines = []
@@ -43,8 +45,9 @@ def _get_part_text(expenses_out: list[tuple], start: int, page_size: int) -> str
 
 def prepare_book(expenses_out: list[tuple], user_id: int, page_size: int = 20):
     """
-    Создаёт словарь страниц для пользователя
-    books[user_id] = {0: 'страница 1', 1: 'страница 2', ...}
+    Build paginated expense text for a user.
+
+    The resulting pages are stored as ``books[user_id] = {page_number: text}``.
     """
     global books
     from collections import defaultdict

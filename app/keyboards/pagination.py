@@ -10,10 +10,10 @@ def create_pagination_keyboard(
     user_id: int, page: int, state: str
 ) -> InlineKeyboardMarkup:
     """
-    Формирует клавиатуру для пагинации.
+    Build an inline keyboard for paginated expense output.
 
-    Для BookState.reading: кнопки prev/next/close и "Сгруппировать?"
-    Для BookState.grouped: только кнопка close
+    ``BookState.reading`` gets prev/next/close controls and a grouping action.
+    ``BookState.grouped`` gets only the close action.
     """
     kb = InlineKeyboardBuilder()
 

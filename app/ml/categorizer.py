@@ -9,12 +9,14 @@ THRESHOLD = 0.16
 
 @lru_cache(maxsize=1)
 def _load_model():
+    """Load and cache the serialized category classifier from disk."""
     with open(MODEL_PATH, "rb") as f:
         return joblib.load(f)
 
 
 class Categorizer:
     def predict(self, item_name: str) -> dict:
+        """Predict a category ID for an item name using exact match or ML model."""
         data = _load_model()
 
         # Слой 1: точное совпадение
@@ -36,6 +38,7 @@ class Categorizer:
             return {"cat_id": None, "confidence": confidence, "method": "manual"}
 
     def reload(self):
+        """Clear the cached model so the next prediction loads the latest file."""
         _load_model.cache_clear()
 
 

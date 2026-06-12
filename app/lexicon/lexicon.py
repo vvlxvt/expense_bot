@@ -104,8 +104,9 @@ LEXICON_KEYS = {
 
 def find_value(search_key: str) -> str | None:
     """
-    Ищет текстовое название категории по ключу (callback_data).
-    Использует заранее подготовленный плоский словарь LEXICON_KEYS.
+    Return a category label by callback-data key.
+
+    Uses the flattened ``LEXICON_KEYS`` mapping built from category dictionaries.
     """
     # .get() вернет None, если ключ не найден (например, для кнопки "correct")
     return LEXICON_KEYS.get(search_key)

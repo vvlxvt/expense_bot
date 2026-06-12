@@ -14,7 +14,7 @@ from app.services.fuzzy_wuzzy import fuzzy_root
 
 
 def make_item_price(note: str) -> tuple[str, float]:
-    """Парсит строку на товар и цену. Возвращает (название, цена)."""
+    """Parse an expense line into an item name and price."""
     pattern_1 = r"(^.+)\s(\d+[\.|,]?\d*)$"
     pattern_2 = r"(^\d+[\.|,]?\d*)\s(.+)$"
 
@@ -36,7 +36,7 @@ def make_item_price(note: str) -> tuple[str, float]:
 
 
 async def get_category(session, item: str) -> str | None:
-    """Возвращает текстовое название(cat) из таблицы категории для товара (item)."""
+    """Return the stored category name for an item, if the item is known."""
     clean_item = item.strip().lower()
     query = (
         select(CatTable.cat)
@@ -52,9 +52,10 @@ async def process_msg_to_expenses(
     session, raw_messages: str, user_id: int
 ) -> str | None:
     """
-    Создает запись о трате ТОЛЬКО один раз:
-    - если категория известна -> сразу пишем в БД;
-    - если категория неизвестна -> кладём в очередь, ждём выбора, в БД пока не пишем.
+    Create expense records for known items and queue unknown items for categorization.
+
+    Known items are saved immediately. Unknown items are kept in the per-user queue
+    until the user picks a suggested or manual category.
     """
     results: list[str] = []
 
@@ -90,6 +91,7 @@ async def process_msg_to_expenses(
 def form_expense_instance(
     no_subs: UserQueue, callback: CallbackQuery
 ) -> Expense | None:
+    """Build an Expense from the queued item and selected manual category callback."""
     user_id = callback.from_user.id
     category_name = LEXICON_KEYS.get(callback.data)
 

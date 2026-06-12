@@ -20,6 +20,7 @@ class Config:
 
 
 def load_config(path: str | None) -> Config:
+    """Load application settings from environment variables and optional .env file."""
     env = Env()
     env.read_env(path)
 
