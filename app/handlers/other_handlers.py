@@ -140,16 +140,18 @@ async def ignore_others(message: Message):
 
 @router.callback_query(F.data == "cancel")
 async def cancel_expense(callback: CallbackQuery, db: DB_Manager):
-    """Skip the current pending item and continue with the next one."""
+    """Skip the current pending item, remove its prompt, and continue."""
     user_id = get_user_id(callback)
 
     skipped = no_subs.dequeue(user_id)
     skipped_name = skipped[2] if skipped else "..."
 
+    await callback.message.delete()
     await callback.message.answer(f"❌ Отменено для: <b>{skipped_name}</b>")
     await callback.answer()
 
-    await proceed_to_next(callback, db)
+    if not no_subs.is_empty(user_id):
+        await ask_choice(callback.message, user_id, db)
 
 
 @router.callback_query(F.data.in_({"correct", "manual_category"}))
