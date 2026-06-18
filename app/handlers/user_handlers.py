@@ -5,7 +5,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
 from app.filters import IsAdmin
-from app.lexicon import LEXICON, LEXICON_MONTH, LEXICON_ANOTHER
+from app.lexicon import (
+    LEXICON,
+    LEXICON_MONTH,
+    LEXICON_ANOTHER,
+    get_month_lexicon,
+    get_year_lexicon,
+)
 from app.keyboards import add_subname_kb, another_kb, one_button_kb
 from app.keyboards.pagination import create_pagination_keyboard
 from app.database import (
@@ -159,8 +165,8 @@ async def week(message: Message, db: DB_Manager):
 async def choose_month(message: Message):
     """Handle /month and display the month selection keyboard."""
     await message.answer(
-        "За какой месяц показать статистику?",
-        reply_markup=add_subname_kb(**LEXICON_MONTH),
+        "За какой год показать статистику?",
+        reply_markup=add_subname_kb(**get_year_lexicon()),
     )
 
 
@@ -279,35 +285,56 @@ async def book_handler(callback: CallbackQuery, state: FSMContext, db: DB_Manage
 # -----------------------------
 # MONTH STATISTICS
 # -----------------------------
-@router.callback_query(F.data.in_(LEXICON_MONTH.keys()))
+@router.callback_query(F.data.startswith("year:"))
+async def choose_year_callback(callback: CallbackQuery):
+    """Handle year selection and display the month selection keyboard."""
+    _, year = callback.data.split(":", maxsplit=1)
+    await callback.message.edit_text(
+        "За какой месяц показать статистику?",
+        reply_markup=add_subname_kb(**get_month_lexicon(int(year))),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("month:"))
 async def choose_month_callback(callback: CallbackQuery, db: DB_Manager):
     """Handle month selection and show monthly category statistics."""
     user_id = get_user_id(callback)
-    month = callback.data
+    _, year, month = callback.data.split(":", maxsplit=2)
+    year = int(year)
     async with db.get_session() as session:
-        res = await get_stat_month(session, user_id, month)
-        total = await spend_month(session, user_id, month)
+        res = await get_stat_month(session, user_id, month, year)
+        total = await spend_month(session, user_id, month, year)
 
     await callback.message.edit_text(
-        f"<u>Траты за <b>{LEXICON_MONTH[month]}</b>:</u>\n"
+        f"<u>Траты за <b>{LEXICON_MONTH[month]} {year}</b>:</u>\n"
         f"{res}\n<b>ИТОГО: {total}</b> GEL"
     )
 
     await callback.message.answer("Показать подробно категорию ДРУГОЕ?")
-    await callback.message.answer(month, reply_markup=another_kb(**LEXICON_ANOTHER))
+    await callback.message.answer(
+        "Выбери действие",
+        reply_markup=another_kb(
+            **{
+                f"_another:{year}:{month}": LEXICON_ANOTHER["_another"],
+                "_cancel": LEXICON_ANOTHER["_cancel"],
+            }
+        ),
+    )
 
 
-@router.callback_query(F.data == "_another")
+@router.callback_query(F.data.startswith("_another:"))
 async def show_another(callback: CallbackQuery, db: DB_Manager):
     """Show detailed rows for the miscellaneous category in the selected month."""
     user_id = get_user_id(callback)
-    month = callback.message.text
+    _, year, month = callback.data.split(":", maxsplit=2)
+    year = int(year)
     async with db.get_session() as session:
-        start_date, end_date = get_month_range(month)
+        start_date, end_date = get_month_range(month, year)
         result = await get_another(session, user_id, start_date, end_date)
 
     await callback.message.answer(
-        f"<u>Другое за <b>{LEXICON_MONTH[month]}</b>:</u>\n{result}"
+        f"<u>Другое за <b>{LEXICON_MONTH[month]} {year}</b>:</u>\n{result}"
     )
     await callback.message.delete_reply_markup()
 

@@ -134,14 +134,14 @@ def format_output(res: list[tuple], width: int = 15) -> list[str]:
     return [f"{key:.<{max_len + 3}} {value}" for key, value in filtered]
 
 
-async def get_stat_month(session, user_id, mm: str):
+async def get_stat_month(session, user_id, mm: str, year: int | None = None):
     """
     Return category totals for a user's selected month.
 
     :param user_id: Telegram user ID.
     :return: Formatted category totals for the chosen month.
     """
-    start_date, end_date = get_month_range(mm)
+    start_date, end_date = get_month_range(mm, year)
     stmt = (
         select(
             CatTable.cat,
@@ -232,9 +232,9 @@ async def spend_week(session, user_id):
     return week_result
 
 
-async def spend_month(session, user_id, month):
+async def spend_month(session, user_id, month, year: int | None = None):
     """Return the user's total spending for the selected month."""
-    start_date, end_date = get_month_range(month)
+    start_date, end_date = get_month_range(month, year)
     stmt = (
         select(func.round(func.sum(MainTable.price), 2))  # Исправлено закрытие скобок
         .join(UserTable, MainTable.user_id == UserTable.id)

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import calendar
 
 
-def get_month_range(month: str) -> tuple:
+def get_month_range(month: str, year: int | None = None) -> tuple:
     """Return the start and end datetimes for a month abbreviation."""
     now = datetime.now()
     month_cap = month[:1].upper() + month[1:].lower()
@@ -11,14 +11,14 @@ def get_month_range(month: str) -> tuple:
         raise ValueError(f"Неверный месяц: {month}")
 
     desired_month = list(calendar.month_abbr).index(month_cap)
-    desired_year = now.year
+    desired_year = year or now.year
 
-    if desired_month > now.month:
+    if year is None and desired_month > now.month:
         desired_year -= 1
 
     start_date = datetime(desired_year, desired_month, 1)
 
-    if desired_month == now.month:
+    if desired_year == now.year and desired_month == now.month:
         end_date = now - timedelta(days=1)
         end_date = end_date.replace(hour=23, minute=59, second=59)
     else:

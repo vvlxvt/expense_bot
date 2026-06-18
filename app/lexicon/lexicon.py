@@ -1,4 +1,5 @@
 from app import config
+from datetime import datetime
 
 conf = config.load_config(None)
 _BASE_WEBHOOK_URL = conf.base_webhook_url.rstrip("/") if conf.base_webhook_url else ""
@@ -26,6 +27,18 @@ LEXICON_MONTH: dict[str, str] = {
     "nov": "ноябрь",
     "dec": "декабрь",
 }
+
+
+def get_year_lexicon() -> dict[str, str]:
+    """Return year buttons from 2023 to the current year."""
+    current_year = datetime.now().year
+    return {f"year:{year}": str(year) for year in range(2023, current_year + 1)}
+
+
+def get_month_lexicon(year: int) -> dict[str, str]:
+    """Return month buttons for a selected year."""
+    return {f"month:{year}:{month}": name for month, name in LEXICON_MONTH.items()}
+
 
 LEXICON_COMMANDS: dict[str, str] = {
     "/del_last_note": "удалить последнюю запись",
