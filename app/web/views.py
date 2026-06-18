@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 import aiohttp_jinja2
 from aiohttp import web
+from app.services.metrics import inc, render_prometheus
 from app.database import (
     get_three_month_avg,
     get_cumulative_data,
@@ -11,6 +12,7 @@ from app.database import (
 
 async def stats_page(request: web.Request):
     """Render the statistics dashboard for the selected category and month."""
+    inc("stats_requests_total")
     category = request.query.get("category")
     month = request.query.get("month")
 
@@ -47,3 +49,9 @@ async def stats_page(request: web.Request):
             "avg3m": avg3m,
         },
     )
+
+
+async def metrics_page(request: web.Request):
+    """Render runtime metrics in Prometheus text format."""
+    inc("metrics_requests_total")
+    return web.Response(text=render_prometheus(), content_type="text/plain")

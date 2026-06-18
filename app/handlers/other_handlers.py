@@ -15,6 +15,7 @@ from app.filters import IsAdmin
 from app import config
 from app.ml.categorizer import categorizer
 from app.services.fuzzy_wuzzy import fuzzy_root
+from app.services.metrics import inc
 
 # -------------------------------------------------
 # CONFIG & ROUTER
@@ -114,6 +115,7 @@ async def proceed_to_next(callback: CallbackQuery, db: DB_Manager):
 @router.message(F.text)
 async def add_note(message: Message, db: DB_Manager):
     """Handle free-form expense text and start categorization when needed."""
+    inc("messages_text_total")
     user_id = get_user_id(message)
     async with db.get_session() as session:
         categories = await process_msg_to_expenses(session, message.text, user_id)
@@ -130,6 +132,7 @@ async def ignore_others(message: Message):
     """
     Ignore non-text messages.
     """
+    inc("messages_ignored_total")
     pass
 
 
@@ -145,6 +148,7 @@ async def cancel_expense(callback: CallbackQuery, db: DB_Manager):
 
     skipped = no_subs.dequeue(user_id)
     skipped_name = skipped[2] if skipped else "..."
+    inc("category_cancel_total")
 
     await callback.message.delete()
     await callback.message.answer(f"❌ Отменено для: <b>{skipped_name}</b>")
@@ -157,6 +161,7 @@ async def cancel_expense(callback: CallbackQuery, db: DB_Manager):
 @router.callback_query(F.data.in_({"correct", "manual_category"}))
 async def back_to_main_menu(callback: CallbackQuery):
     """Open the manual category menu for the current pending item."""
+    inc("category_manual_open_total")
     await ask_next_item(callback.message, get_user_id(callback), edit=True)
     await callback.answer()
 
@@ -203,6 +208,7 @@ async def category_select(callback: CallbackQuery, db: DB_Manager):
     async with db.get_session() as session:
         await add_new_data(session, expense)
     no_subs.dequeue(user_id)
+    inc("category_manual_saved_total")
 
     await callback.message.answer(f"Сохранено: {expense.category}")
     await callback.answer()
@@ -239,6 +245,7 @@ async def suggested_category_select(callback: CallbackQuery, db: DB_Manager):
     async with db.get_session() as session:
         await add_new_data(session, expense)
     no_subs.dequeue(user_id)
+    inc(f"category_{source}_saved_total")
 
     await callback.message.answer(f"Сохранено: {expense.category}")
     await callback.answer()

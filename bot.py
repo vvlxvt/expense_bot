@@ -13,7 +13,8 @@ from app.keyboards import set_main_menu
 from app import handlers
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from app.services import daily_timer
-from app.web.views import stats_page
+from app.services.metrics import inc
+from app.web.views import metrics_page, stats_page
 
 conf = config.load_config(None)
 TOKEN = conf.tg_bot.token
@@ -36,6 +37,7 @@ async def handle_retrain(db):
 
 async def on_startup(bot: Bot, db: DB_Manager):
     """Register webhook, configure commands, and start background startup tasks."""
+    inc("app_startups_total")
     await bot.set_webhook(f"{BASE_WEBHOOK_URL}{WEBHOOK_PATH}")
     await set_main_menu(bot)
     asyncio.create_task(daily_timer())
@@ -70,6 +72,7 @@ def main():
 
     # Регистрация маршрутов
     app.router.add_get("/stats", stats_page)
+    app.router.add_get("/metrics", metrics_page)
     app.router.add_static("/static/", path="app/static", name="static")
 
     # передаем db в SimpleRequestHandler

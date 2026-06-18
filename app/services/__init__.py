@@ -5,6 +5,8 @@ __all__ = (
     "get_week_range",
     "prepare_book",
     "books",
+    "inc",
+    "render_prometheus",
 )
 
 from .aux_functions import (
@@ -15,3 +17,4 @@ from .aux_functions import (
     prepare_book,
     books,
 )
+from .metrics import inc, render_prometheus

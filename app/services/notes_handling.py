@@ -11,6 +11,7 @@ from app.database.my_queue import UserQueue, no_subs
 from app.lexicon.lexicon import LEXICON_KEYS
 from app.ml.categorizer import categorizer
 from app.services.fuzzy_wuzzy import fuzzy_root
+from app.services.metrics import inc
 
 
 def make_item_price(note: str) -> tuple[str, float]:
@@ -81,9 +82,11 @@ async def process_msg_to_expenses(
             )
 
             await add_new_data(session, expense)
+            inc("expenses_known_total")
             results.append(category_name)
         else:
             no_subs.queue(user_id, (item_name, price, line))
+            inc("expenses_queued_total")
 
     return ", ".join(results) or None
 

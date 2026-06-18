@@ -18,6 +18,7 @@ The bot understands messages such as `coffee 12.50` or `12.50 coffee`. Known ite
 - Daily, weekly, and monthly summaries in chat.
 - Pagination for long expense lists.
 - Web dashboard at `/stats` with category and month filters.
+- Prometheus-compatible runtime metrics at `/metrics`.
 - ML model retraining on application startup.
 - Background daily timer task.
 
@@ -138,6 +139,7 @@ Default server values:
 | Port | `80` |
 | Webhook path | `/bot<BOT_TOKEN>` |
 | Charts page | `/stats` |
+| Metrics page | `/metrics` |
 | Static files | `/static/` |
 
 For local development, expose the local server through a public HTTPS tunnel such as ngrok, Cloudflare Tunnel, or a similar tool.
@@ -155,6 +157,32 @@ It uses:
 - templates from `app/templates`;
 - static files from `app/static`;
 - database query helpers from `app/database/functions.py`.
+
+## Metrics
+
+Runtime metrics are exposed in Prometheus text format:
+
+```text
+https://<BASE_WEBHOOK_URL>/metrics
+```
+
+The metrics are intentionally dependency-free and stored in process memory. They reset when the bot process restarts.
+
+Current counters include:
+
+- `expensebot_app_startups_total`
+- `expensebot_messages_text_total`
+- `expensebot_messages_ignored_total`
+- `expensebot_expenses_known_total`
+- `expensebot_expenses_queued_total`
+- `expensebot_category_ml_saved_total`
+- `expensebot_category_fuzzy_saved_total`
+- `expensebot_category_manual_saved_total`
+- `expensebot_category_cancel_total`
+- `expensebot_stats_requests_total`
+- `expensebot_metrics_requests_total`
+
+The endpoint also exposes `expensebot_uptime_seconds` as a gauge.
 
 ## Project Structure
 
@@ -187,6 +215,7 @@ Important files:
 - `app/handlers/other_handlers.py` handles free-form expense messages and category selection.
 - `app/services/notes_handling.py` parses expense text and queues unknown items.
 - `app/services/fuzzy_wuzzy.py` resolves fuzzy category suggestions from known items.
+- `app/services/metrics.py` stores in-memory counters and renders Prometheus text output.
 - `app/ml/categorizer.py` loads the trained model and predicts category IDs.
 - `app/ml/ml_model.py` retrains the model from labeled dictionary items.
 - `app/database/interaction_db.py` saves expenses and updates the item dictionary.
